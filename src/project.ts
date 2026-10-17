@@ -10,10 +10,24 @@ const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d)
 const oneOf = <T extends string>(v: unknown, opts: readonly T[], d: T): T =>
   typeof v === 'string' && (opts as readonly string[]).includes(v) ? (v as T) : d
 
+const HEX = /^#[0-9a-f]{6}$/i
+const IMAGE_SRC = /^data:image\/(png|jpeg|webp|gif|svg\+xml);base64,[a-z0-9+/=]+$/i
+
+function colorMap(v: unknown): Record<string, string> | undefined {
+  if (!isObj(v)) return undefined
+  const out: Record<string, string> = {}
+  for (const [k, c] of Object.entries(v)) if (HEX.test(k) && typeof c === 'string' && HEX.test(c)) out[k.toLowerCase()] = c
+  return Object.keys(out).length ? out : undefined
+}
+
 function sanitizeItem(raw: unknown): Item | null {
   if (!isObj(raw)) return null
   const id = str(raw.id, '') || uid()
-  const flags = { hidden: bool(raw.hidden, false) || undefined, locked: bool(raw.locked, false) || undefined }
+  const flags = {
+    hidden: bool(raw.hidden, false) || undefined,
+    locked: bool(raw.locked, false) || undefined,
+    group: str(raw.group, '').slice(0, 40) || undefined,
+  }
   const box = {
     x: num(raw.x, 0),
     y: num(raw.y, 0),
@@ -33,6 +47,23 @@ function sanitizeItem(raw: unknown): Item | null {
         iconId,
         flipX: bool(raw.flipX, false),
         opacity: Math.min(1, Math.max(0, num(raw.opacity, 1))),
+        colors: colorMap(raw.colors),
+      }
+    }
+    case 'image': {
+      const src = str(raw.src, '')
+      if (!IMAGE_SRC.test(src) || src.length > 14_000_000) return null
+      return {
+        ...flags,
+        ...box,
+        type: 'image',
+        id,
+        src,
+        flipX: bool(raw.flipX, false),
+        opacity: Math.min(1, Math.max(0, num(raw.opacity, 1))),
+        name: typeof raw.name === 'string' ? raw.name.slice(0, 120) : undefined,
+        smiles: typeof raw.smiles === 'string' ? raw.smiles.slice(0, 2000) : undefined,
+        smilesColor: typeof raw.smilesColor === 'boolean' ? raw.smilesColor : undefined,
       }
     }
     case 'shape':
@@ -76,6 +107,9 @@ function sanitizeItem(raw: unknown): Item | null {
         strokeWidth: Math.max(0.5, num(raw.strokeWidth, 3)),
         head: oneOf(raw.head, ['end', 'both', 'none'] as const, 'end'),
         dashed: bool(raw.dashed, false),
+        kind: oneOf(raw.kind, ['straight', 'elbow', 'curve'] as const, 'straight'),
+        bend: Math.min(1.5, Math.max(-1.5, num(raw.bend, 0.5))),
+        axis: oneOf(raw.axis, ['h', 'v'] as const, 'h'),
       }
     default:
       return null
@@ -117,10 +151,12 @@ export function loadAutosave(): Doc | null {
   }
 }
 
-export function saveAutosave(doc: Doc) {
+/** Returns false when the browser would not keep it (storage full or unavailable). */
+export function saveAutosave(doc: Doc): boolean {
   try {
     localStorage.setItem(KEY, serializeProject(doc))
+    return true
   } catch {
-    /* storage can be unavailable or full; the figure still works without it */
+    return false
   }
 }

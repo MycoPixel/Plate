@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ARTBOARDS } from './defaults'
+import { ARTBOARDS, defaultBend } from './defaults'
 import { Glyph } from './Glyph'
 import type { GlyphName } from './Glyph'
-import { ICON_BY_ID, iconUrl } from './icons'
-import type { Doc, Item } from './types'
+import { getIcon, ICON_BY_ID, iconUrl, useIconCacheVersion } from './icons'
+import type { Doc, ImageItem, Item } from './types'
 import { round2 } from './util'
 
 export type Align = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
@@ -22,6 +22,10 @@ type Props = {
   onAlign: (a: Align) => void
   onSelect: (ids: string[], additive: boolean) => void
   onToggle: (id: string, flag: 'hidden' | 'locked') => void
+  onGroup: () => void
+  onUngroup: () => void
+  onScale: (factor: number) => void
+  onRedrawStructure: (id: string, smiles: string, color: boolean) => Promise<boolean>
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -134,8 +138,10 @@ const nameOf = (it: Item) => {
       return ICON_BY_ID.get(it.iconId)?.label ?? 'Icon'
     case 'text':
       return it.text.split('\n')[0].slice(0, 28) || 'Text'
+    case 'image':
+      return it.smiles ? 'Structure' : (it.name ?? 'Image')
     case 'arrow':
-      return 'Arrow'
+      return it.kind === 'elbow' ? 'Elbow arrow' : it.kind === 'curve' ? 'Curved arrow' : 'Arrow'
     case 'shape':
       return it.shape === 'rect' ? 'Rectangle' : 'Ellipse'
   }
@@ -152,7 +158,7 @@ function Layers({ doc, selected, onSelect, onToggle }: Pick<Props, 'doc' | 'sele
         <ul className="layers">
           {rows.map((it) => {
             const meta = it.type === 'icon' ? ICON_BY_ID.get(it.iconId) : undefined
-            const glyph: GlyphName = it.type === 'text' ? 'text' : it.type === 'arrow' ? 'arrow' : it.type === 'shape' ? (it.shape === 'rect' ? 'rect' : 'ellipse') : 'file'
+            const glyph: GlyphName = it.type === 'image' ? 'image' : it.type === 'text' ? 'text' : it.type === 'arrow' ? 'arrow' : it.type === 'shape' ? (it.shape === 'rect' ? 'rect' : 'ellipse') : 'file'
             return (
               <li key={it.id} data-hidden={it.hidden || undefined}>
                 <button
@@ -161,8 +167,15 @@ function Layers({ doc, selected, onSelect, onToggle }: Pick<Props, 'doc' | 'sele
                   aria-pressed={ids.has(it.id)}
                   onClick={(e) => onSelect([it.id], e.shiftKey)}
                 >
-                  {meta ? <img src={iconUrl(meta)} alt="" draggable={false} /> : <Glyph name={glyph} size={16} />}
+                  {meta ? (
+                    <img src={iconUrl(meta)} alt="" draggable={false} />
+                  ) : it.type === 'image' ? (
+                    <img src={it.src} alt="" draggable={false} />
+                  ) : (
+                    <Glyph name={glyph} size={16} />
+                  )}
                   <span>{nameOf(it)}</span>
+                  {it.group && <Glyph name="group" size={13} />}
                 </button>
                 <IconBtn
                   icon={it.hidden ? 'eyeOff' : 'eye'}
@@ -183,9 +196,56 @@ function Layers({ doc, selected, onSelect, onToggle }: Pick<Props, 'doc' | 'sele
   )
 }
 
+function StructureEditor({
+  item,
+  onApply,
+}: {
+  item: ImageItem
+  onApply: (smiles: string, color: boolean) => Promise<boolean>
+}) {
+  const [text, setText] = useState(item.smiles ?? '')
+  const [busy, setBusy] = useState(false)
+  const color = item.smilesColor ?? true
+  const apply = async (c = color) => {
+    setBusy(true)
+    try {
+      await onApply(text, c)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <>
+      <label className="field wide">
+        <span>SMILES</span>
+        <textarea
+          rows={2}
+          spellCheck={false}
+          className="mono"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void apply()
+          }}
+        />
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={color} onChange={(e) => void apply(e.target.checked)} />
+        <span>Colour the heteroatoms</span>
+      </label>
+      <div className="btn-row">
+        <button type="button" className="mini" disabled={busy || text.trim() === (item.smiles ?? '')} onClick={() => void apply()}>
+          {busy ? 'Drawing…' : 'Redraw structure'}
+        </button>
+      </div>
+    </>
+  )
+}
+
 export function Inspector(props: Props) {
   const { doc, selected, patch, patchDoc } = props
   const textRef = useRef<HTMLTextAreaElement>(null)
+  useIconCacheVersion() // the colour list appears once the selected icon has loaded
 
   useEffect(() => {
     if (props.focusTextTick === 0) return
@@ -210,6 +270,8 @@ export function Inspector(props: Props) {
         <IconBtn icon="backward" label="Send backward" onClick={() => props.onOrder('backward')} />
         <IconBtn icon="back" label="Send to back" onClick={() => props.onOrder('back')} />
         <span className="spacer" />
+        <IconBtn icon="group" label="Group (Ctrl+G)" disabled={selected.length < 2} onClick={props.onGroup} />
+        <IconBtn icon="ungroup" label="Ungroup (Ctrl+Shift+G)" disabled={!selected.some((i) => i.group)} onClick={props.onUngroup} />
         <IconBtn icon="copy" label="Duplicate" onClick={props.onDuplicate} />
         <IconBtn icon="trash" label="Delete" onClick={props.onDelete} />
       </div>
@@ -261,12 +323,19 @@ export function Inspector(props: Props) {
             <IconBtn icon="alignM" label="Align vertical centres" onClick={() => props.onAlign('middle')} />
             <IconBtn icon="alignB" label="Align bottom edges" onClick={() => props.onAlign('bottom')} />
           </div>
+          <div className="btn-row">
+            <IconBtn icon="minus" label="Make selection 10% smaller" onClick={() => props.onScale(0.9)} />
+            <IconBtn icon="plus" label="Make selection 10% larger" onClick={() => props.onScale(1.1)} />
+            <span className="note small">Scale together</span>
+          </div>
         </Section>
         {arrange}
       </>
     )
   } else {
     const meta = one.type === 'icon' ? ICON_BY_ID.get(one.iconId) : undefined
+    const loaded = one.type === 'icon' ? getIcon(one.iconId) : undefined
+    const palette = loaded?.status === 'ready' ? loaded.palette : []
     body = (
       <>
         <Section title={nameOf(one)}>
@@ -321,7 +390,58 @@ export function Inspector(props: Props) {
                 {meta.license}
               </a>
               . Added to your credits automatically.
+              {one.colors ? ' Recoloured icons are credited as adapted.' : ''}
             </p>
+          </Section>
+        )}
+
+        {one.type === 'icon' && palette.length > 0 && (
+          <Section title="Colours">
+            <div className="swatches">
+              {palette.slice(0, 12).map((orig) => (
+                <input
+                  key={orig}
+                  type="color"
+                  aria-label={`Recolour ${orig}`}
+                  title={orig}
+                  value={one.colors?.[orig] ?? orig}
+                  onChange={(e) => {
+                    const next = { ...(one.colors ?? {}), [orig]: e.target.value }
+                    if (e.target.value.toLowerCase() === orig) delete next[orig]
+                    set({ colors: Object.keys(next).length ? next : undefined }, `col:${orig}`)
+                  }}
+                />
+              ))}
+            </div>
+            {palette.length > 12 && (
+              <p className="note small">Showing the 12 most used of {palette.length} colours.</p>
+            )}
+            <button type="button" className="mini" disabled={!one.colors} onClick={() => set({ colors: undefined }, 'colreset')}>
+              Reset colours
+            </button>
+          </Section>
+        )}
+
+        {one.type === 'image' && (
+          <Section title={one.smiles ? 'Structure' : 'Image'}>
+            <div className="btn-row">
+              <IconBtn icon="flip" label="Flip horizontally" pressed={one.flipX} onClick={() => set({ flipX: !one.flipX }, 'flip')} />
+            </div>
+            <label className="field wide">
+              <span>Opacity</span>
+              <input
+                type="range"
+                min={5}
+                max={100}
+                value={Math.round(one.opacity * 100)}
+                onChange={(e) => set({ opacity: Number(e.target.value) / 100 }, 'op')}
+              />
+            </label>
+            {one.smiles !== undefined ? (
+              <StructureEditor key={one.id} item={one} onApply={(smiles, color) => props.onRedrawStructure(one.id, smiles, color)} />
+            ) : (
+              <p className="note small">Your own image. Its license is yours to check; it is not part of the icon credits.</p>
+            )}
           </Section>
         )}
 
@@ -376,6 +496,54 @@ export function Inspector(props: Props) {
 
         {one.type === 'arrow' && (
           <Section title="Style">
+            <div className="btn-row kinds" role="group" aria-label="Arrow shape">
+              <IconBtn icon="kindStraight" label="Straight arrow" pressed={one.kind === 'straight'} onClick={() => set({ kind: 'straight' }, 'kind')} />
+              <IconBtn
+                icon="kindElbow"
+                label="Elbow arrow"
+                pressed={one.kind === 'elbow'}
+                onClick={() => set({ kind: 'elbow', bend: defaultBend('elbow') }, 'kind')}
+              />
+              <IconBtn
+                icon="kindCurve"
+                label="Curved arrow"
+                pressed={one.kind === 'curve'}
+                onClick={() => set({ kind: 'curve', bend: defaultBend('curve') }, 'kind')}
+              />
+            </div>
+            {one.kind === 'curve' && (
+              <label className="field wide">
+                <span>Curve</span>
+                <input
+                  type="range"
+                  min={-100}
+                  max={100}
+                  value={Math.round(one.bend * 100)}
+                  onChange={(e) => set({ bend: Number(e.target.value) / 100 }, 'bend')}
+                />
+              </label>
+            )}
+            {one.kind === 'elbow' && (
+              <>
+                <label className="field wide">
+                  <span>Bend position</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round(one.bend * 100)}
+                    onChange={(e) => set({ bend: Number(e.target.value) / 100 }, 'bend')}
+                  />
+                </label>
+                <label className="field wide">
+                  <span>Leaves the start</span>
+                  <select value={one.axis} onChange={(e) => set({ axis: e.target.value }, 'axis')}>
+                    <option value="h">Sideways first</option>
+                    <option value="v">Up or down first</option>
+                  </select>
+                </label>
+              </>
+            )}
             <Color label="Colour" value={one.stroke} onChange={(c) => set({ stroke: c }, 'stroke')} />
             <div className="grid2">
               <Num label="Width" value={one.strokeWidth} min={0.5} step={0.5} onChange={(n) => set({ strokeWidth: Math.max(0.5, n) }, 'sw')} />

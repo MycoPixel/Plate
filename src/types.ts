@@ -14,11 +14,33 @@ export type IconMeta = {
   source: string
 }
 
-type Flags = { hidden?: boolean; locked?: boolean }
+type Flags = { hidden?: boolean; locked?: boolean; group?: string }
 type Box = { x: number; y: number; w: number; h: number; rotation: number }
 
 export type IconItem = Flags &
-  Box & { type: 'icon'; id: string; iconId: string; flipX: boolean; opacity: number }
+  Box & {
+    type: 'icon'
+    id: string
+    iconId: string
+    flipX: boolean
+    opacity: number
+    /** Recolouring: original colour (#rrggbb, as found in the icon) to replacement colour. */
+    colors?: Record<string, string>
+  }
+
+/** A picture the user brought: an imported SVG/PNG/JPG, or a structure drawn from a SMILES string. */
+export type ImageItem = Flags &
+  Box & {
+    type: 'image'
+    id: string
+    src: string
+    flipX: boolean
+    opacity: number
+    name?: string
+    smiles?: string
+    /** Structure drawings only: colour the heteroatoms. */
+    smilesColor?: boolean
+  }
 
 export type ShapeItem = Flags &
   Box & {
@@ -57,9 +79,14 @@ export type ArrowItem = Flags & {
   strokeWidth: number
   head: 'end' | 'both' | 'none'
   dashed: boolean
+  kind: 'straight' | 'elbow' | 'curve'
+  /** Curve: sideways bulge as a fraction of the length. Elbow: where the bend sits along the arrow (0 to 1). */
+  bend: number
+  /** Elbow only: which direction the arrow leaves its start in. */
+  axis: 'h' | 'v'
 }
 
-export type Item = IconItem | ShapeItem | TextItem | ArrowItem
+export type Item = IconItem | ImageItem | ShapeItem | TextItem | ArrowItem
 
 export type Doc = {
   title: string

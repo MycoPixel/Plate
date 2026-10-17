@@ -1,6 +1,6 @@
 import { creditsText, wrapLines } from './credits'
 import { arrowParts, boxOf, FIGURE_FONT, iconLayout, measureText, r3, transformAttr } from './geometry'
-import { getIcon, ensureIcons, ICON_BY_ID, scopeIds } from './icons'
+import { getIcon, ensureIcons, ICON_BY_ID, iconDataUri, resolveColors, scopeIds } from './icons'
 import type { Doc, Item } from './types'
 
 const esc = (s: string) =>
@@ -28,16 +28,21 @@ function itemSvg(item: Item): string {
           width: r3(item.w),
           height: r3(item.h),
           preserveAspectRatio: 'none',
-          'xlink:href': parsed.dataUri,
+          'xlink:href': iconDataUri(item.iconId, parsed, item.colors),
         })}/></g>`
       }
       const clipId = `clip-${item.id}`
       return (
         `${open}<g transform="${l.inner}" clip-path="url(#${clipId})">` +
         `<clipPath id="${clipId}"><rect${attrs({ x: l.clip.x, y: l.clip.y, width: l.clip.w, height: l.clip.h })}/></clipPath>` +
-        `${scopeIds(parsed.inner, item.id)}</g></g>`
+        `${scopeIds(resolveColors(parsed.inner, parsed.palette, item.colors), item.id)}</g></g>`
       )
     }
+    case 'image':
+      return (
+        `<g id="image-${item.id}"${attrs({ transform: transformAttr(item, item.flipX), opacity: item.opacity < 1 ? item.opacity : undefined })}>` +
+        `<image${attrs({ x: r3(item.x), y: r3(item.y), width: r3(item.w), height: r3(item.h), preserveAspectRatio: 'none', 'xlink:href': item.src })}/></g>`
+      )
     case 'shape': {
       const common = {
         fill: item.fill,
@@ -71,10 +76,10 @@ function itemSvg(item: Item): string {
       })}>${spans}</text>`
     }
     case 'arrow': {
-      const { line, heads } = arrowParts(item)
+      const { d, heads } = arrowParts(item)
       const dash = item.dashed ? `${item.strokeWidth * 3} ${item.strokeWidth * 2}` : undefined
       return (
-        `<g><line${attrs({ x1: line[0], y1: line[1], x2: line[2], y2: line[3], stroke: item.stroke, 'stroke-width': item.strokeWidth, 'stroke-dasharray': dash })}/>` +
+        `<g><path${attrs({ d, fill: 'none', stroke: item.stroke, 'stroke-width': item.strokeWidth, 'stroke-linejoin': 'round', 'stroke-dasharray': dash })}/>` +
         heads.map((p) => `<polygon points="${p}" fill="${esc(item.stroke)}"/>`).join('') +
         '</g>'
       )

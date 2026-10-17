@@ -42,7 +42,16 @@ export const CATEGORIES = Array.from(new Set(ICONS.map((i) => i.category))).sort
 export const iconUrl = (meta: IconMeta) => new URL(meta.file, document.baseURI).href
 
 export type ParsedIcon =
-  | { status: 'ready'; inline: boolean; inner: string; dataUri: string }
+  | {
+      status: 'ready'
+      inline: boolean
+      /** Inline icons: the markup inside <svg>, with colours swapped for __C0__ style tokens. */
+      inner: string
+      /** Icons that carry their own <style>: the whole file as text, also tokenised. */
+      svgText: string
+      /** Colours used by the icon (#rrggbb), most used first. Index matches the tokens. */
+      palette: string[]
+    }
   | { status: 'error' }
 
 const cache = new Map<string, ParsedIcon>()
@@ -76,7 +85,7 @@ const OK_ATTR_NS = new Set([
 ])
 const P = '__P__' // placeholder replaced by a per-item prefix so ids never collide
 
-function toBase64(s: string) {
+export function toBase64(s: string) {
   const bytes = new TextEncoder().encode(s)
   let bin = ''
   for (let i = 0; i < bytes.length; i += 0x8000) {
@@ -85,14 +94,99 @@ function toBase64(s: string) {
   return btoa(bin)
 }
 
-function parseSvg(text: string, meta: IconMeta): ParsedIcon {
-  const doc = new DOMParser().parseFromString(text, 'image/svg+xml')
-  const root = doc.documentElement
-  if (!root || root.localName !== 'svg' || doc.querySelector('parsererror')) {
-    return { status: 'error' }
-  }
 
-  // Strip anything that is not plain SVG: scripts, editor metadata, foreign namespaces.
+const NAMED: Record<string, string> = {
+  black: '#000000',
+  white: '#ffffff',
+  red: '#ff0000',
+  green: '#008000',
+  blue: '#0000ff',
+  yellow: '#ffff00',
+  orange: '#ffa500',
+  purple: '#800080',
+  pink: '#ffc0cb',
+  gray: '#808080',
+  grey: '#808080',
+  brown: '#a52a2a',
+  cyan: '#00ffff',
+  magenta: '#ff00ff',
+}
+const COLOR_PROPS = ['fill', 'stroke', 'stop-color', 'flood-color', 'lighting-color']
+const hex2 = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0')
+
+/** Any simple CSS colour as #rrggbb, or null when it is not one (none, url(...), currentColor, alpha forms). */
+export function normColor(raw: string): string | null {
+  const v = raw.trim().toLowerCase()
+  if (/^#[0-9a-f]{6}$/.test(v)) return v
+  if (/^#[0-9a-f]{3}$/.test(v)) return `#${v[1]}${v[1]}${v[2]}${v[2]}${v[3]}${v[3]}`
+  const m = v.match(/^rgb\(\s*([\d.]+)(%?)\s*[, ]\s*([\d.]+)%?\s*[, ]\s*([\d.]+)%?\s*\)$/)
+  if (m) {
+    const k = m[2] ? 2.55 : 1
+    return `#${hex2(+m[1] * k)}${hex2(+m[3] * k)}${hex2(+m[4] * k)}`
+  }
+  return NAMED[v] ?? null
+}
+
+/** Pulls every plain colour out of the icon into tokens, so a figure can swap them without touching the file. */
+function tokenizeColors(all: Element[]) {
+  const order: string[] = []
+  const counts = new Map<string, number>()
+  const token = (c: string) => {
+    let i = order.indexOf(c)
+    if (i === -1) {
+      i = order.push(c) - 1
+    }
+    counts.set(c, (counts.get(c) ?? 0) + 1)
+    return `__C${i}__`
+  }
+  const inCss = (css: string) =>
+    css.replace(
+      new RegExp(`(^|[;{\\s])(${COLOR_PROPS.join('|')})(\\s*:\\s*)([^;}"'\\n]+)`, 'gi'),
+      (whole, pre: string, prop: string, colon: string, val: string) => {
+        const c = normColor(val.replace(/!important/i, ''))
+        return c ? `${pre}${prop}${colon}${token(c)}` : whole
+      },
+    )
+  for (const el of all) {
+    for (const prop of COLOR_PROPS) {
+      const v = el.getAttribute(prop)
+      const c = v ? normColor(v) : null
+      if (c) el.setAttribute(prop, token(c))
+    }
+    const st = el.getAttribute('style')
+    if (st) el.setAttribute('style', inCss(st))
+    if (el.localName === 'style' && el.textContent) el.textContent = inCss(el.textContent)
+  }
+  const palette = [...order].sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0))
+  // tokens were numbered in first-seen order; remap them so index 0 is the most used colour
+  const remap = new Map(order.map((c, i) => [i, palette.indexOf(c)]))
+  return { palette, remap }
+}
+
+/** Puts real colours back in place of the tokens, using the item's replacements where it has any. */
+export function resolveColors(text: string, palette: string[], colors?: Record<string, string>) {
+  if (!palette.length) return text
+  return text.replace(/__C(\d+)__/g, (_m, i: string) => {
+    const orig = palette[Number(i)] ?? '#000000'
+    return colors?.[orig] ?? orig
+  })
+}
+
+const dataUriCache = new Map<string, string>()
+/** Isolated (<style>) icons are drawn as images, so recolouring means building a fresh data URI. */
+export function iconDataUri(id: string, parsed: Extract<ParsedIcon, { status: 'ready' }>, colors?: Record<string, string>) {
+  const key = `${id}|${colors ? JSON.stringify(colors) : ''}`
+  let uri = dataUriCache.get(key)
+  if (!uri) {
+    uri = `data:image/svg+xml;base64,${toBase64(resolveColors(parsed.svgText, parsed.palette, colors))}`
+    if (dataUriCache.size > 400) dataUriCache.clear()
+    dataUriCache.set(key, uri)
+  }
+  return uri
+}
+
+/** Removes scripts, editor metadata, foreign namespaces and event handlers from a parsed SVG tree. */
+export function stripUnsafe(root: Element): Element[] {
   const drop: Element[] = []
   root.querySelectorAll('*').forEach((el) => {
     if (
@@ -109,20 +203,35 @@ function parseSvg(text: string, meta: IconMeta): ParsedIcon {
       if (/^on/i.test(a.name) || !OK_ATTR_NS.has(a.namespaceURI)) el.removeAttributeNode(a)
     }
   }
+  return all
+}
+
+function parseSvg(text: string, meta: IconMeta): ParsedIcon {
+  const doc = new DOMParser().parseFromString(text, 'image/svg+xml')
+  const root = doc.documentElement
+  if (!root || root.localName !== 'svg' || doc.querySelector('parsererror')) {
+    return { status: 'error' }
+  }
+
+  // Strip anything that is not plain SVG: scripts, editor metadata, foreign namespaces.
+  const all = stripUnsafe(root)
 
   // Icons that carry <style> rules would leak CSS into each other, so they stay isolated as images.
   const inline = !root.querySelector('style')
+
+  const { palette, remap } = tokenizeColors(all)
+  const retoken = (str: string) => str.replace(/__C(\d+)__/g, (_m, i: string) => `__C${remap.get(Number(i)) ?? i}__`)
 
   if (!inline) {
     root.setAttribute('viewBox', meta.viewBox.join(' '))
     root.setAttribute('width', '100%')
     root.setAttribute('height', '100%')
-    const s = new XMLSerializer().serializeToString(root)
     return {
       status: 'ready',
       inline: false,
       inner: '',
-      dataUri: `data:image/svg+xml;base64,${toBase64(s)}`,
+      svgText: retoken(new XMLSerializer().serializeToString(root)),
+      palette,
     }
   }
 
@@ -144,7 +253,7 @@ function parseSvg(text: string, meta: IconMeta): ParsedIcon {
   const out = new XMLSerializer().serializeToString(root)
   const close = out.lastIndexOf('</svg>')
   const inner = close === -1 ? '' : out.slice(out.indexOf('>') + 1, close)
-  return { status: 'ready', inline: true, inner, dataUri: '' }
+  return { status: 'ready', inline: true, inner: retoken(inner), svgText: '', palette }
 }
 
 async function load(id: string) {

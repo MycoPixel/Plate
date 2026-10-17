@@ -18,7 +18,9 @@ export function usedIcons(doc: Doc): IconMeta[] {
 export function creditsText(doc: Doc): string {
   const used = usedIcons(doc)
   if (!used.length) return ''
-  const parts = used.map((m) => `${m.label} by ${m.author} (${m.license})`)
+  // CC BY asks that changes are mentioned, and recolouring is a change.
+  const recoloured = new Set(doc.items.flatMap((i) => (i.type === 'icon' && i.colors ? [i.iconId] : [])))
+  const parts = used.map((m) => `${m.label} by ${m.author} (${m.license}${recoloured.has(m.id) ? ', recoloured' : ''})`)
   return `Icons from Bioicons (bioicons.com): ${parts.join('; ')}.`
 }
 

@@ -17,16 +17,21 @@ Serve `dist/` over HTTP (GitHub Pages, Netlify, `npm run preview`). Opening `dis
 ## What it does
 
 - 1,635 icons in 33 categories (chemistry, lab apparatus, amino acids, nucleic acids, safety symbols, microbiology, parasites, physiology and more), searchable. Click to add or drag onto the board.
+- Recolour any icon: the Colours section lists the colours the icon uses, and each one can be swapped. Recoloured icons are credited as "recoloured", as CC BY asks.
+- Straight, elbow and curved arrows. Drag the diamond handle to bend them.
+- Group items (Ctrl/Cmd+G, ungroup with Shift) so they select and move together. Alt-click picks one item inside a group. "Scale together" grows or shrinks a selection.
+- Insert menu: panel labels (A, B, C…), a scale bar, a chemical structure drawn from a SMILES string, and your own SVG, PNG, JPG, WebP or GIF (also by dropping files on the board or pasting a copied picture).
 - Text, arrows (with arrowheads, dashes), rectangles and ellipses. Move, resize, rotate, flip, opacity, layers (hide, lock, reorder), align, duplicate.
 - Marquee select, grid and snap, zoom (Ctrl/Cmd + wheel), pan (hold Space or middle mouse), undo and redo.
 - Export SVG (icons stay editable vectors, openable in Inkscape or Illustrator), PNG at 1×, 2× or 4×, and a `.plate.json` project file.
 - A credit line for every icon you used, copyable and optionally added under exported images.
 
-Shortcuts: V select, T text, A arrow, R rectangle, E ellipse. Delete removes. Arrow keys nudge (Shift for 10). Ctrl/Cmd+Z undo, +Shift redo, +D duplicate, +A select all, +S save project, +0 fit. `[` and `]` reorder layers.
+Shortcuts: V select, T text, A arrow, R rectangle, E ellipse. Delete removes. Arrow keys nudge (Shift for 10). Ctrl/Cmd+Z undo, +Shift redo, +D duplicate, +G group (+Shift ungroup), +A select all, +S save project, +0 fit. `[` and `]` reorder layers.
 
 ## Licenses
 
 The icons keep their own licenses, listed per icon in [ICON_CREDITS.md](ICON_CREDITS.md). Please read it before redistributing the app with the icons included.
+Structures are drawn with [smiles-drawer](https://github.com/reymond-group/smilesDrawer) (MIT), loaded only when you open the structure dialog. Images you import are yours: they are not part of the icon credits, so check their licenses yourself.
 The code has no license file yet; add the one you want before publishing.
 
 ## Adding or refreshing icons

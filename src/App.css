@@ -640,6 +640,57 @@ input[type='checkbox'] {
 .dialog textarea {
   font-size: 13px;
 }
+.mono {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.structure-preview {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  max-height: 300px;
+  margin: 10px 0 14px;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+}
+.structure-preview img {
+  max-width: 100%;
+  max-height: 270px;
+  object-fit: contain;
+}
+.note.error {
+  color: var(--eosin);
+}
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.swatches input[type='color'] {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.kinds {
+  margin-bottom: 8px;
+}
+.layer .group-mark {
+  flex: none;
+  color: var(--hema);
+  opacity: 0.8;
+}
 
 .toast {
   position: fixed;

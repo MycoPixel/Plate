@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import {
   aabbOf,
   arrowParts,
+  bendFromPoint,
   boxOf,
   centerOf,
   FIGURE_FONT,
@@ -14,17 +15,19 @@ import {
   translateItem,
   unionAabb,
 } from './geometry'
-import { getIcon, ICON_BY_ID, scopeIds, useIconCacheVersion } from './icons'
+import { expandGroups } from './groups'
+import { getIcon, ICON_BY_ID, iconDataUri, resolveColors, scopeIds, useIconCacheVersion } from './icons'
 import { newArrow, newShape } from './defaults'
 import { ICON_MIME } from './Palette'
-import type { ArrowItem, Doc, Handle, IconItem, Item, Pt, Rect, ShapeItem, TextItem, Tool } from './types'
+import type { ArrowItem, Doc, Handle, IconItem, ImageItem, Item, Pt, Rect, ShapeItem, TextItem, Tool } from './types'
 import { clamp, isFormTarget } from './util'
 
 type Drag =
   | { kind: 'move'; start: Pt; origin: Map<string, Item>; primary: string; moved: boolean; shift: boolean }
-  | { kind: 'resize'; handle: Handle; origin: IconItem | ShapeItem | TextItem; moved: boolean }
-  | { kind: 'rotate'; origin: IconItem | ShapeItem | TextItem; center: Pt; startAngle: number; moved: boolean }
+  | { kind: 'resize'; handle: Handle; origin: IconItem | ImageItem | ShapeItem | TextItem; moved: boolean }
+  | { kind: 'rotate'; origin: IconItem | ImageItem | ShapeItem | TextItem; center: Pt; startAngle: number; moved: boolean }
   | { kind: 'arrowEnd'; which: 1 | 2; origin: ArrowItem; moved: boolean }
+  | { kind: 'arrowBend'; origin: ArrowItem; moved: boolean }
   | { kind: 'create'; tool: 'arrow' | 'rect' | 'ellipse'; start: Pt; id: string | null }
   | { kind: 'marquee'; start: Pt; base: string[]; moved: boolean }
   | { kind: 'pan'; sx: number; sy: number; left: number; top: number }
@@ -51,54 +54,89 @@ const HANDLES: [Handle, number, number][] = [
   ['w', -1, 0],
 ]
 
-const ItemView = memo(function ItemView({ item, zoom, v }: { item: Item; zoom: number; v: number }) {
+const IconView = memo(function IconView({ item, v }: { item: IconItem; v: number }) {
   void v // changes when an icon finishes loading, so memoised rows redraw
+  const meta = ICON_BY_ID.get(item.iconId)
+  const parsed = getIcon(item.iconId)
+  // Colour swapping and id scoping are string work; keep the result until the icon or its colours change.
+  const html = useMemo(
+    () =>
+      parsed?.status === 'ready' && parsed.inline
+        ? scopeIds(resolveColors(parsed.inner, parsed.palette, item.colors), item.id)
+        : '',
+    [parsed, item.colors, item.id],
+  )
+  const uri = useMemo(
+    () => (parsed?.status === 'ready' && !parsed.inline ? iconDataUri(item.iconId, parsed, item.colors) : ''),
+    [parsed, item.colors, item.iconId],
+  )
+  if (!meta) return null
+  const l = iconLayout(item, meta.viewBox)
+  return (
+    <g
+      data-id={item.id}
+      transform={l.outer}
+      opacity={item.opacity < 1 ? item.opacity : undefined}
+      data-locked={item.locked || undefined}
+    >
+      <rect x={item.x} y={item.y} width={item.w} height={item.h} fill="transparent" />
+      {parsed?.status === 'ready' && parsed.inline && (
+        <g transform={l.inner} clipPath={`url(#clip-${item.id})`} pointerEvents="none">
+          <clipPath id={`clip-${item.id}`}>
+            <rect x={l.clip.x} y={l.clip.y} width={l.clip.w} height={l.clip.h} />
+          </clipPath>
+          <g dangerouslySetInnerHTML={{ __html: html }} />
+        </g>
+      )}
+      {parsed?.status === 'ready' && !parsed.inline && (
+        <image
+          x={item.x}
+          y={item.y}
+          width={item.w}
+          height={item.h}
+          preserveAspectRatio="none"
+          xlinkHref={uri}
+          pointerEvents="none"
+        />
+      )}
+      {parsed?.status !== 'ready' && (
+        <rect
+          className={parsed?.status === 'error' ? 'icon-error' : 'icon-loading'}
+          x={item.x}
+          y={item.y}
+          width={item.w}
+          height={item.h}
+          pointerEvents="none"
+        />
+      )}
+    </g>
+  )
+})
+
+const ItemView = memo(function ItemView({ item, zoom, v }: { item: Item; zoom: number; v: number }) {
   switch (item.type) {
-    case 'icon': {
-      const meta = ICON_BY_ID.get(item.iconId)
-      if (!meta) return null
-      const parsed = getIcon(item.iconId)
-      const l = iconLayout(item, meta.viewBox)
+    case 'icon':
+      return <IconView item={item} v={v} />
+    case 'image':
       return (
         <g
           data-id={item.id}
-          transform={l.outer}
+          transform={transformAttr(item, item.flipX)}
           opacity={item.opacity < 1 ? item.opacity : undefined}
           data-locked={item.locked || undefined}
         >
           <rect x={item.x} y={item.y} width={item.w} height={item.h} fill="transparent" />
-          {parsed?.status === 'ready' && parsed.inline && (
-            <g transform={l.inner} clipPath={`url(#clip-${item.id})`} pointerEvents="none">
-              <clipPath id={`clip-${item.id}`}>
-                <rect x={l.clip.x} y={l.clip.y} width={l.clip.w} height={l.clip.h} />
-              </clipPath>
-              <g dangerouslySetInnerHTML={{ __html: scopeIds(parsed.inner, item.id) }} />
-            </g>
-          )}
-          {parsed?.status === 'ready' && !parsed.inline && (
-            <image
-              x={item.x}
-              y={item.y}
-              width={item.w}
-              height={item.h}
-              preserveAspectRatio="none"
-              xlinkHref={parsed.dataUri}
-              pointerEvents="none"
-            />
-          )}
-          {parsed?.status !== 'ready' && (
-            <rect
-              className={parsed?.status === 'error' ? 'icon-error' : 'icon-loading'}
-              x={item.x}
-              y={item.y}
-              width={item.w}
-              height={item.h}
-              pointerEvents="none"
-            />
-          )}
+          <image
+            x={item.x}
+            y={item.y}
+            width={item.w}
+            height={item.h}
+            preserveAspectRatio="none"
+            xlinkHref={item.src}
+            pointerEvents="none"
+          />
         </g>
       )
-    }
     case 'shape': {
       const common = {
         fill: item.fill,
@@ -149,26 +187,23 @@ const ItemView = memo(function ItemView({ item, zoom, v }: { item: Item; zoom: n
       )
     }
     case 'arrow': {
-      const { line, heads } = arrowParts(item)
+      const { d, hit, heads } = arrowParts(item)
       return (
         <g data-id={item.id} data-locked={item.locked || undefined}>
-          <line
-            x1={item.x1}
-            y1={item.y1}
-            x2={item.x2}
-            y2={item.y2}
+          <path
+            d={hit}
+            fill="none"
             stroke="transparent"
             strokeWidth={Math.max(item.strokeWidth, 14 / zoom)}
             pointerEvents="stroke"
           />
           <g pointerEvents="none">
-            <line
-              x1={line[0]}
-              y1={line[1]}
-              x2={line[2]}
-              y2={line[3]}
+            <path
+              d={d}
+              fill="none"
               stroke={item.stroke}
               strokeWidth={item.strokeWidth}
+              strokeLinejoin="round"
               strokeDasharray={item.dashed ? `${item.strokeWidth * 3} ${item.strokeWidth * 2}` : undefined}
             />
             {heads.map((p, i) => (
@@ -188,17 +223,23 @@ function Overlay({ items, zoom }: { items: Item[]; zoom: number }) {
   if (items.length === 1) {
     const it = items[0]
     if (it.type === 'arrow') {
+      const { hit, handle: mid } = arrowParts(it)
       return (
         <g>
-          <line
-            className="sel-line"
-            x1={it.x1}
-            y1={it.y1}
-            x2={it.x2}
-            y2={it.y2}
-            vectorEffect="non-scaling-stroke"
-            pointerEvents="none"
-          />
+          <path className="sel-line" d={hit} fill="none" vectorEffect="non-scaling-stroke" pointerEvents="none" />
+          {it.kind !== 'straight' && (
+            <rect
+              className="handle"
+              data-handle="bend"
+              x={mid.x - hs / 2}
+              y={mid.y - hs / 2}
+              width={hs}
+              height={hs}
+              transform={`rotate(45 ${mid.x} ${mid.y})`}
+              vectorEffect="non-scaling-stroke"
+              style={{ cursor: 'move' }}
+            />
+          )}
           {([1, 2] as const).map((w) => (
             <circle
               key={w}
@@ -297,6 +338,7 @@ export type CanvasProps = {
   onAddIcon: (iconId: string, at: Pt) => void
   onCreateText: (at: Pt) => void
   onExample: () => void
+  onImportFiles: (files: File[], at: Pt) => void
 }
 
 export function Canvas(props: CanvasProps) {
@@ -440,6 +482,10 @@ export function Canvas(props: CanvasProps) {
         drag.current = { kind: 'arrowEnd', which: handle === 'a1' ? 1 : 2, origin: only, moved: false }
         return
       }
+      if (handle === 'bend' && only.type === 'arrow') {
+        drag.current = { kind: 'arrowBend', origin: only, moved: false }
+        return
+      }
       if (only.type !== 'arrow' && handle in CURSORS) {
         drag.current = { kind: 'resize', handle: handle as Handle, origin: only, moved: false }
         return
@@ -449,16 +495,23 @@ export function Canvas(props: CanvasProps) {
     const id = t.closest('[data-id]')?.getAttribute('data-id') ?? null
     const item = id ? doc.items.find((i) => i.id === id) : undefined
     if (id && item && !item.locked) {
+      const members = expandGroups(doc.items, [id])
       let sel = selection
-      if (e.shiftKey) {
-        sel = selection.includes(id) ? selection.filter((s) => s !== id) : [...selection, id]
+      if (e.altKey) {
+        // Alt-click reaches into a group and picks just this item.
+        sel = [id]
+        setSelection(sel)
+      } else if (e.shiftKey) {
+        sel = selection.includes(id)
+          ? selection.filter((s) => !members.includes(s))
+          : Array.from(new Set([...selection, ...members]))
         setSelection(sel)
         if (!sel.includes(id)) {
           drag.current = null
           return
         }
       } else if (!selection.includes(id)) {
-        sel = [id]
+        sel = members
         setSelection(sel)
       }
       drag.current = {
@@ -520,7 +573,7 @@ export function Canvas(props: CanvasProps) {
           d.moved = true
           checkpoint()
         }
-        const lock = (d.origin.type === 'icon') !== e.shiftKey
+        const lock = (d.origin.type === 'icon' || d.origin.type === 'image') !== e.shiftKey
         const next = resizeItem(d.origin, d.handle, snap ? snapP(p) : p, lock)
         patch(d.origin.id, () => next)
         break
@@ -547,6 +600,15 @@ export function Canvas(props: CanvasProps) {
         patch(d.origin.id, (it) =>
           it.type !== 'arrow' ? it : d.which === 1 ? { ...it, x1: q.x, y1: q.y } : { ...it, x2: q.x, y2: q.y },
         )
+        break
+      }
+      case 'arrowBend': {
+        if (!d.moved) {
+          d.moved = true
+          checkpoint()
+        }
+        const bend = Math.round(bendFromPoint(d.origin, snap ? snapP(p) : p) * 100) / 100
+        patch(d.origin.id, (it) => (it.type === 'arrow' ? { ...it, bend } : it))
         break
       }
       case 'create': {
@@ -590,7 +652,7 @@ export function Canvas(props: CanvasProps) {
         }
         setMarquee(r)
         const hit = doc.items.filter((it) => !it.hidden && !it.locked && rectsIntersect(aabbOf(it), r)).map((i) => i.id)
-        setSelection(Array.from(new Set([...d.base, ...hit])))
+        setSelection(Array.from(new Set([...d.base, ...expandGroups(doc.items, hit)])))
         break
       }
     }
@@ -603,19 +665,25 @@ export function Canvas(props: CanvasProps) {
     if (stage?.hasPointerCapture(e.pointerId)) stage.releasePointerCapture(e.pointerId)
     if (!d) return
     if (d.kind === 'marquee') setMarquee(null)
-    if (d.kind === 'move' && !d.moved && !d.shift && selection.length > 1) setSelection([d.primary])
+    if (d.kind === 'move' && !d.moved && !d.shift && selection.length > 1) setSelection(expandGroups(doc.items, [d.primary]))
     if (d.kind === 'create' && d.id) props.onToolDone()
   }
 
   const onDragOver = (e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes(ICON_MIME)) {
+    if (e.dataTransfer.types.includes(ICON_MIME) || e.dataTransfer.types.includes('Files')) {
       e.preventDefault()
       e.dataTransfer.dropEffect = 'copy'
     }
   }
   const onDrop = (e: React.DragEvent) => {
     const id = e.dataTransfer.getData(ICON_MIME)
-    if (!id) return
+    if (!id) {
+      if (e.dataTransfer.files.length) {
+        e.preventDefault()
+        props.onImportFiles(Array.from(e.dataTransfer.files), snapP(toBoard(e)))
+      }
+      return
+    }
     e.preventDefault()
     props.onAddIcon(id, snapP(toBoard(e)))
   }

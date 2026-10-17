@@ -1,6 +1,6 @@
 import { measureText } from './geometry'
 import { ICON_BY_ID } from './icons'
-import type { ArrowItem, Doc, IconItem, IconMeta, Item, Pt, ShapeItem, TextItem } from './types'
+import type { ArrowItem, Doc, IconItem, IconMeta, ImageItem, Item, Pt, ShapeItem, TextItem } from './types'
 
 export const uid = () => Math.random().toString(36).slice(2, 9)
 
@@ -83,7 +83,32 @@ export const newArrow = (at: Pt): ArrowItem => ({
   strokeWidth: 3,
   head: 'end',
   dashed: false,
+  kind: 'straight',
+  bend: 0.5,
+  axis: 'h',
 })
+
+/** Starting bend value that looks right for each arrow kind. */
+export const defaultBend = (kind: ArrowItem['kind']) => (kind === 'curve' ? 0.25 : 0.5)
+
+export function newImage(src: string, nw: number, nh: number, center: Pt, extra: Partial<ImageItem> = {}, maxSize = 260): ImageItem {
+  const s = Math.min(1, maxSize / Math.max(nw, nh)) || 1
+  const w = Math.max(8, nw * s)
+  const h = Math.max(8, nh * s)
+  return {
+    type: 'image',
+    id: uid(),
+    src,
+    x: center.x - w / 2,
+    y: center.y - h / 2,
+    w,
+    h,
+    rotation: 0,
+    flipX: false,
+    opacity: 1,
+    ...extra,
+  }
+}
 
 /** A small starter figure so a new user can see how things fit together. */
 export function exampleDoc(): Doc {

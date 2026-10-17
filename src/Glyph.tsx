@@ -153,6 +153,31 @@ const PATHS = {
   textRight: <path d="M4 6h16M10 10h10M4 14h16M10 18h10" />,
   dashed: <path d="M3 12h4M10 12h4M17 12h4" />,
   check: <path d="M5 12.5l4.5 4.5L19 7" />,
+  group: (
+    <>
+      <rect x="4" y="4" width="9" height="9" rx="1" />
+      <rect x="11" y="11" width="9" height="9" rx="1" />
+      <path d="M2.5 2.5h19v19h-19z" strokeDasharray="2 3" />
+    </>
+  ),
+  ungroup: (
+    <>
+      <rect x="3.5" y="3.5" width="8" height="8" rx="1" />
+      <rect x="12.5" y="12.5" width="8" height="8" rx="1" />
+    </>
+  ),
+  kindStraight: <path d="M5 19L19 5" />,
+  kindElbow: <path d="M4 18h8V6h8" />,
+  kindCurve: <path d="M4 19C4 9 10 5 20 5" />,
+  structure: <path d="M12 3l7 4v8l-7 4-7-4V7zM12 3v8M5 7l7 4 7-4" />,
+  image: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="M4 17l5-4.5 3.5 3 3-2.5L20 16" />
+    </>
+  ),
+  insert: <path d="M12 5v14M5 12h14" />,
   credit: (
     <>
       <circle cx="12" cy="12" r="8.5" />
