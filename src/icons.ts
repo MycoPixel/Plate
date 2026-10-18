@@ -1,27 +1,53 @@
 import { useSyncExternalStore } from 'react'
 import raw from './icons.json'
+import rawBioart from './icons.bioart.json'
+import rawCommons from './icons.commons.json'
+import rawPhylopic from './icons.phylopic.json'
+import rawHealth from './icons.healthicons.json'
 import type { IconMeta } from './types'
 
+type LicenseKey = 'cc0' | 'mit' | 'by25' | 'by3' | 'by4' | 'pd'
 type RawIcon = {
   id: string
   label: string
   category: string
   author: string
-  license: 'cc0' | 'mit' | 'by3' | 'by4'
+  license: LicenseKey
   inline: boolean
   viewBox: number[]
 }
+type RawBioartIcon = RawIcon & {
+  collection: string
+  date: string
+  entry: number
+  doi: string
+}
+type RawCommonsIcon = RawIcon & {
+  /** Commons names the license of each file on its own, so the url comes per file. */
+  licenseUrl: string
+  /** File name on Commons, used to build the link back to the file page. */
+  file: string
+}
 const { authors, icons: rawIcons } = raw as unknown as { authors: Record<string, string>; icons: RawIcon[] }
+const { icons: rawBioartIcons } = rawBioart as unknown as { icons: RawBioartIcon[] }
+const { icons: rawCommonsIcons } = rawCommons as unknown as { icons: RawCommonsIcon[] }
+type RawPhylopicIcon = RawIcon & { licenseUrl: string; uuid: string }
+const { icons: rawPhylopicIcons } = rawPhylopic as unknown as { icons: RawPhylopicIcon[] }
+type RawHealthIcon = RawIcon & { licenseUrl: string; style: string; healthCategory: string; tags: string[] }
+const { icons: rawHealthIcons } = rawHealth as unknown as { icons: RawHealthIcon[] }
 
 // icons.json stores only what varies per icon; the rest is derived here.
 const LICENSES = {
   cc0: { name: 'CC0 1.0', url: 'https://creativecommons.org/publicdomain/zero/1.0/' },
   mit: { name: 'MIT', url: 'https://opensource.org/licenses/MIT' },
+  by25: { name: 'CC BY 2.5', url: 'https://creativecommons.org/licenses/by/2.5/' },
   by3: { name: 'CC BY 3.0', url: 'https://creativecommons.org/licenses/by/3.0/' },
   by4: { name: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' },
+  // NIH BioArt Source marks its own illustrations "Public Domain" and links to its FAQ for the terms.
+  pd: { name: 'Public Domain', url: 'https://bioart.niaid.nih.gov/faqs#usage-restrictions-bioart' },
 }
 
-export const ICONS: IconMeta[] = rawIcons.map((r) => ({
+const fromBioicons = (r: RawIcon): IconMeta => ({
   id: r.id,
   label: r.label,
   category: r.category,
@@ -33,7 +59,79 @@ export const ICONS: IconMeta[] = rawIcons.map((r) => ({
   author: r.author,
   authorUrl: authors[r.author] ?? '',
   source: 'https://bioicons.com',
-}))
+})
+
+const fromBioart = (r: RawBioartIcon): IconMeta => ({
+  id: r.id,
+  label: r.label,
+  category: r.category,
+  file: `icons/${r.id}.svg`,
+  inline: r.inline,
+  viewBox: r.viewBox,
+  license: LICENSES[r.license].name,
+  licenseUrl: LICENSES[r.license].url,
+  author: r.author,
+  authorUrl: '',
+  source: `https://bioart.niaid.nih.gov/bioart/${r.entry}`,
+  collection: r.collection,
+  date: r.date,
+  doi: r.doi,
+})
+
+const fromCommons = (r: RawCommonsIcon): IconMeta => ({
+  id: r.id,
+  label: r.label,
+  category: r.category,
+  file: `icons/${r.id}.svg`,
+  inline: r.inline,
+  viewBox: r.viewBox,
+  license: LICENSES[r.license].name,
+  licenseUrl: r.licenseUrl || LICENSES[r.license].url,
+  author: r.author,
+  authorUrl: '',
+  source: `https://commons.wikimedia.org/wiki/${encodeURIComponent(r.file)}`,
+  via: 'Wikimedia Commons',
+})
+
+const fromPhylopic = (r: RawPhylopicIcon): IconMeta => ({
+  id: r.id,
+  label: r.label,
+  category: r.category,
+  file: `icons/${r.id}.svg`,
+  inline: r.inline,
+  viewBox: r.viewBox,
+  license: LICENSES[r.license].name,
+  licenseUrl: r.licenseUrl || LICENSES[r.license].url,
+  author: r.author,
+  authorUrl: '',
+  source: `https://www.phylopic.org/images/${r.uuid}`,
+  via: 'PhyloPic',
+})
+
+const fromHealth = (r: RawHealthIcon): IconMeta => ({
+  id: r.id,
+  label: r.label,
+  category: r.category,
+  file: `icons/${r.id}.svg`,
+  inline: r.inline,
+  viewBox: r.viewBox,
+  license: LICENSES.cc0.name,
+  licenseUrl: r.licenseUrl,
+  author: r.author,
+  authorUrl: '',
+  source: `https://healthicons.org/icon/${r.style}/${r.healthCategory}/${r.id.replace(/^health-/, '')}`,
+  via: 'Health Icons',
+  /** Their own keywords, so a search finds "measles" as well as "Rash". */
+  tags: r.tags,
+})
+
+export const ICONS: IconMeta[] = [
+  ...rawIcons.map(fromBioicons),
+  ...rawBioartIcons.map(fromBioart),
+  ...rawCommonsIcons.map(fromCommons),
+  ...rawPhylopicIcons.map(fromPhylopic),
+  ...rawHealthIcons.map(fromHealth),
+]
 export const ICON_BY_ID = new Map(ICONS.map((i) => [i.id, i]))
 export const CATEGORIES = Array.from(new Set(ICONS.map((i) => i.category))).sort((a, b) =>
   a.localeCompare(b),

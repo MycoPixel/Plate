@@ -1,3 +1,4 @@
+import { t } from './i18n'
 import { stripUnsafe, toBase64 } from './icons'
 
 export type ImportedImage = { src: string; w: number; h: number; name: string }
@@ -11,7 +12,7 @@ const readDataUrl = (file: Blob) =>
   new Promise<string>((resolve, reject) => {
     const r = new FileReader()
     r.onload = () => resolve(String(r.result))
-    r.onerror = () => reject(new Error('The file could not be read.'))
+    r.onerror = () => reject(new Error(t('The file could not be read.')))
     r.readAsDataURL(file)
   })
 
@@ -28,7 +29,7 @@ export function svgTextToImage(text: string, name: string): ImportedImage {
   const doc = new DOMParser().parseFromString(text, 'image/svg+xml')
   const root = doc.documentElement
   if (!root || root.localName !== 'svg' || doc.querySelector('parsererror')) {
-    throw new Error('That does not look like a valid SVG file.')
+    throw new Error(t('That does not look like a valid SVG file.'))
   }
   stripUnsafe(root)
   root.querySelectorAll('image').forEach((im) => {
@@ -45,21 +46,21 @@ export function svgTextToImage(text: string, name: string): ImportedImage {
 
 export async function importImageFile(file: File): Promise<ImportedImage> {
   const name = file.name.replace(/\.[^.]+$/, '') || 'Image'
-  if (file.size > MAX_FILE) throw new Error('That file is larger than 25 MB.')
+  if (file.size > MAX_FILE) throw new Error(t('That file is larger than 25 MB.'))
   const isSvg = file.type === 'image/svg+xml' || /\.svg$/i.test(file.name)
   if (isSvg) {
-    if (file.size > MAX_SVG) throw new Error('That SVG is larger than 4 MB. Simplify it first, or export it as PNG.')
+    if (file.size > MAX_SVG) throw new Error(t('That SVG is larger than 4 MB. Simplify it first, or export it as PNG.'))
     return svgTextToImage(await file.text(), name)
   }
   if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) {
-    throw new Error('Use an SVG, PNG, JPG, WebP or GIF image.')
+    throw new Error(t('Use an SVG, PNG, JPG, WebP or GIF image.'))
   }
   const url = URL.createObjectURL(file)
   try {
     const img = new Image()
     img.src = url
     await img.decode().catch(() => {
-      throw new Error('That image could not be opened.')
+      throw new Error(t('That image could not be opened.'))
     })
     const nw = img.naturalWidth
     const nh = img.naturalHeight
@@ -70,11 +71,11 @@ export async function importImageFile(file: File): Promise<ImportedImage> {
     canvas.width = Math.max(1, Math.round(nw * s))
     canvas.height = Math.max(1, Math.round(nh * s))
     const ctx = canvas.getContext('2d')
-    if (!ctx) throw new Error('Canvas is not available in this browser.')
+    if (!ctx) throw new Error(t('Canvas is not available in this browser.'))
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
     const jpeg = file.type === 'image/jpeg'
     const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, jpeg ? 'image/jpeg' : 'image/png', 0.9))
-    if (!blob) throw new Error('The image could not be compressed.')
+    if (!blob) throw new Error(t('The image could not be compressed.'))
     return { src: await readDataUrl(blob), w: nw, h: nh, name }
   } finally {
     URL.revokeObjectURL(url)

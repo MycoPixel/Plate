@@ -1,0 +1,64 @@
+# Icons from Health Icons that the app leaves out, one fragment per line, matched against the icon's
+# name (case-insensitive). Used by scripts/fetch_healthicons.py --block.
+#
+# Two groups: product logos and data standards, which are not drawings to put in a figure, and the
+# interface chrome of their website, plus every "ALT" twin, which is the same drawing again.
+
+# product names, logos and data standards
+dhis2
+simple.org
+openmrs
+fhir
+loinc
+icd
+
+# website interface chrome, not science
+ui 
+network 2g
+network 3g
+network 4g
+network 5g
+network high bars
+network low bars
+network medium bars
+excel
+magic wand
+chat
+call center
+video
+tally
+notes
+approved document
+denied document
+
+# the same drawing a second time
+ alt
+
+# generic UI glyphs that say nothing in a figure
+alert circle
+info
+settings
+preferences
+question circle
+question triangle
+plus
+minus
+no
+stop
+cancel
+entry
+
+# organisational charts, not drawings
+policy gaps
+resilient and migration
+integrated data and research
+human resources
+finance
+job level
+high level
+medium level
+low level
+
+# very specific insecticide testing symbols
+concentration bioassays
+bioassays

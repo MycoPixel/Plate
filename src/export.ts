@@ -2,6 +2,7 @@ import { creditsText, wrapLines } from './credits'
 import { arrowParts, boxOf, FIGURE_FONT, iconLayout, measureText, r3, transformAttr } from './geometry'
 import { getIcon, ensureIcons, ICON_BY_ID, iconDataUri, resolveColors, scopeIds } from './icons'
 import type { Doc, Item } from './types'
+import { t } from './i18n'
 
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -135,7 +136,7 @@ export async function renderPng(doc: Doc, scale: number, withCredits: boolean): 
     if (!ctx) throw new Error('Canvas is not available in this browser.')
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
     return await new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG encoding failed.'))), 'image/png'),
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error(t('PNG encoding failed.')))), 'image/png'),
     )
   } finally {
     URL.revokeObjectURL(url)

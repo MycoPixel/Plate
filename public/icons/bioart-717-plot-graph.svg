@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 500 500">
+  <!-- Generator: Adobe Illustrator 30.4.0, SVG Export Plug-In . SVG Version: 2.1.4 Build 226)  -->
+  <defs>
+    <style>
+      .st0 {
+        fill: none;
+        stroke: #1d1716;
+        stroke-miterlimit: 10;
+        stroke-width: 3.368px;
+      }
+
+      .st1, .st2 {
+        fill: #9086bf;
+      }
+
+      .st3, .st4 {
+        fill: #f19e78;
+      }
+
+      .st5, .st6 {
+        fill: #73aac9;
+      }
+
+      .st6, .st7, .st2, .st4 {
+        mix-blend-mode: multiply;
+      }
+
+      .st8 {
+        isolation: isolate;
+      }
+
+      .st7 {
+        fill: #b9507f;
+      }
+    </style>
+  </defs>
+  <g class="st8">
+    <g id="Graph0001">
+      <line class="st0" x1="99.947" y1="99.587" x2="99.947" y2="400.413"/>
+      <line class="st0" x1="99.947" y1="400.413" x2="400.053" y2="400.413"/>
+      <ellipse class="st5" cx="139.243" cy="226.771" rx="16.724" ry="16.764"/>
+      <ellipse class="st6" cx="163.493" cy="221.742" rx="16.724" ry="16.764"/>
+      <ellipse class="st6" cx="178.545" cy="184.861" rx="16.724" ry="16.764"/>
+      <ellipse class="st1" cx="263.219" cy="182.346" rx="16.724" ry="16.764"/>
+      <ellipse class="st2" cx="278.688" cy="166.839" rx="16.724" ry="16.764"/>
+      <ellipse class="st2" cx="275.344" cy="199.529" rx="16.724" ry="16.764"/>
+      <ellipse class="st3" cx="317.99" cy="245.631" rx="16.724" ry="16.764"/>
+      <ellipse class="st7" cx="199.868" cy="323.584" rx="16.724" ry="16.764"/>
+      <ellipse class="st7" cx="170.601" cy="358.789" rx="16.724" ry="16.764"/>
+      <ellipse class="st7" cx="209.066" cy="340.348" rx="16.724" ry="16.764"/>
+      <ellipse class="st7" cx="244.187" cy="370.524" rx="16.724" ry="16.764"/>
+      <ellipse class="st3" cx="357.709" cy="205.816" rx="16.724" ry="16.764"/>
+      <ellipse class="st4" cx="361.89" cy="190.728" rx="16.724" ry="16.764"/>
+    </g>
+  </g>
+</svg>

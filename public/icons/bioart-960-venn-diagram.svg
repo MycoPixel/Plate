@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 500 500">
+  <!-- Generator: Adobe Illustrator 30.7.0, SVG Export Plug-In . SVG Version: 2.1.4 Build 114)  -->
+  <defs>
+    <style>
+      .st0 {
+        fill: #4dccbd;
+        opacity: .71;
+      }
+
+      .st1 {
+        fill: #f2dbc7;
+      }
+
+      .st1, .st2, .st3, .st4 {
+        mix-blend-mode: multiply;
+      }
+
+      .st5 {
+        fill: none;
+        stroke: #fff;
+        stroke-miterlimit: 10;
+        stroke-width: 1.729px;
+      }
+
+      .st2 {
+        fill: #f5ede6;
+      }
+
+      .st6 {
+        clip-path: url(#clippath-1);
+      }
+
+      .st7 {
+        fill: #d3d2d1;
+      }
+
+      .st8 {
+        isolation: isolate;
+      }
+
+      .st9 {
+        fill: #d8c5b5;
+        mix-blend-mode: overlay;
+      }
+
+      .st10 {
+        fill: #87b6a7;
+      }
+
+      .st4 {
+        fill: #eacdb3;
+      }
+
+      .st11 {
+        fill: #eedac9;
+      }
+
+      .st12 {
+        clip-path: url(#clippath-2);
+      }
+
+      .st13 {
+        clip-path: url(#clippath);
+      }
+
+      .st14 {
+        fill: #c6cfe5;
+      }
+    </style>
+    <clipPath id="clippath">
+      <circle class="st11" cx="250" cy="146.051" r="87.897"/>
+    </clipPath>
+    <clipPath id="clippath-1">
+      <circle class="st2" cx="151.898" cy="216.596" r="87.897"/>
+    </clipPath>
+    <clipPath id="clippath-2">
+      <circle class="st9" cx="348.103" cy="216.596" r="87.897"/>
+    </clipPath>
+  </defs>
+  <g class="st8">
+    <g id="Venn_x5F_Diagram0001">
+      <g>
+        <g id="Multilateral_circle" class="st3">
+          <circle class="st11" cx="250" cy="146.051" r="87.897"/>
+          <g class="st13">
+            <rect class="st10" x="717.484" y="-34.19" width="301.496" height="301.969"/>
+          </g>
+        </g>
+        <g id="Local_stakeholders_buy-in_circle" class="st3">
+          <circle class="st2" cx="151.898" cy="216.596" r="87.897"/>
+          <g class="st6">
+            <circle class="st14" cx="193.171" cy="336.545" r="87.897"/>
+          </g>
+        </g>
+        <circle id="Organizational_network_circle" class="st4" cx="306.83" cy="336.545" r="87.897"/>
+        <circle id="Needs_identification_circle" class="st1" cx="193.171" cy="336.545" r="87.897"/>
+        <g id="Equipment_and_training_circle" class="st3">
+          <circle class="st9" cx="348.103" cy="216.596" r="87.897"/>
+          <g class="st12">
+            <circle class="st14" cx="306.83" cy="336.545" r="87.897"/>
+            <circle class="st14" cx="249.973" cy="146.059" r="87.897"/>
+          </g>
+        </g>
+        <circle class="st0" cx="250" cy="250" r="49.243"/>
+        <circle class="st5" cx="250" cy="250" r="49.243"/>
+        <g id="outer_circle">
+          <path class="st7" d="M245.986,52.353c-107.151,2.147-193.659,89.967-193.659,197.622,0,26.088,5.091,51.007,14.314,73.829l-16.794,7.408c-10.331-25.462-15.754-52.931-15.754-81.237,0-57.671,22.458-111.89,63.238-152.669,39.832-39.832,92.487-62.171,148.655-63.189v18.236Z"/>
+          <path class="st7" d="M69.79,331.191c31.041,68.607,100.142,116.458,180.211,116.458s149.072-47.784,180.144-116.314l16.785,7.404c-10.604,23.499-25.485,45.13-44.261,63.906-40.78,40.779-94.998,63.238-152.669,63.238s-111.89-22.458-152.669-63.238c-18.814-18.815-33.718-40.495-44.327-64.05l16.785-7.404Z"/>
+          <path class="st7" d="M433.299,323.952c9.261-22.863,14.374-47.832,14.374-73.977,0-107.655-86.508-195.476-193.659-197.622v-18.236c56.168,1.018,108.823,23.357,148.655,63.189,40.78,40.78,63.238,94.998,63.238,152.669,0,28.36-5.443,55.881-15.813,81.385l-16.795-7.408Z"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

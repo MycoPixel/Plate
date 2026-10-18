@@ -9,6 +9,7 @@ import { Glyph } from './Glyph'
 import type { GlyphName } from './Glyph'
 import { useHistory } from './history'
 import { ensureIcons, ICON_BY_ID } from './icons'
+import { getLang, LANGS, setLang, t, useLang } from './i18n'
 import { importImageFile } from './images'
 import { Inspector } from './Inspector'
 import type { Align, Order } from './Inspector'
@@ -59,6 +60,7 @@ function Logo() {
 }
 
 export default function App() {
+  const lang = useLang()
   const initial = useMemo(() => loadAutosave() ?? emptyDoc(), [])
   const { doc, set, checkpoint, undo, redo, canUndo, canRedo } = useHistory<Doc>(initial)
   const [selection, setSelection] = useState<string[]>([])
@@ -93,18 +95,18 @@ export default function App() {
     void ensureIcons(doc.items.flatMap((i) => (i.type === 'icon' ? [i.iconId] : [])))
   }, [doc.items])
   useEffect(() => {
-    const t = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       if (saveAutosave(doc)) saveWarned.current = false
       else if (!saveWarned.current) {
         saveWarned.current = true
-        say('This figure is too big for the browser to keep automatically. Use File, Save project so you do not lose it.')
+        say(t('This figure is too big for the browser to keep automatically. Use File, Save project so you do not lose it.'))
       }
     }, 500)
-    return () => window.clearTimeout(t)
+    return () => window.clearTimeout(timer)
   }, [doc, say])
   useEffect(() => {
-    document.title = `${doc.title || 'Untitled figure'} – Plate`
-  }, [doc.title])
+    document.title = `${doc.title || t('Untitled figure')} – Plate`
+  }, [doc.title, lang])
 
   const patchItems = useCallback(
     (ids: string[], p: Record<string, unknown>, key?: string) =>
@@ -135,7 +137,7 @@ export default function App() {
       setSelection([item.id])
       setTool('select')
       setPanel('right')
-      setFocusTextTick((t) => t + 1)
+      setFocusTextTick((n) => n + 1)
     },
     [set],
   )
@@ -242,14 +244,14 @@ export default function App() {
     set((d) => ({ ...d, items: [...d.items, bar, label] }))
     setSelection([bar.id, label.id])
     setTool('select')
-    say('Scale bar added. Edit its label (Alt-click the text) and resize the bar so it matches your image’s scale.')
+    say(t('Scale bar added. Edit its label (Alt-click the text) and resize the bar so it matches your image’s scale.'))
   }, [doc.height, set, say])
 
   const importFiles = useCallback(
     async (files: File[], at?: Pt) => {
       const images = files.filter((f) => /^image\//.test(f.type) || /\.svg$/i.test(f.name))
       if (images.length === 0) {
-        say('Drop an SVG, PNG, JPG, WebP or GIF image.')
+        say(t('Drop an SVG, PNG, JPG, WebP or GIF image.'))
         return
       }
       const added: Item[] = []
@@ -261,7 +263,7 @@ export default function App() {
           const c = at ?? { x: doc.width / 2, y: doc.height / 2 }
           added.push(newImage(img.src, img.w, img.h, { x: c.x + n * 24, y: c.y + n * 24 }, { name: img.name }))
         } catch (err) {
-          failed.push(`${f.name}: ${err instanceof Error ? err.message : 'could not be imported.'}`)
+          failed.push(`${f.name}: ${err instanceof Error ? err.message : t('could not be imported.')}`)
         }
       }
       if (added.length) {
@@ -270,14 +272,14 @@ export default function App() {
         setTool('select')
         setPanel(null)
       }
-      if (failed.length) say(failed[0] + (failed.length > 1 ? ` (and ${failed.length - 1} more)` : ''))
+      if (failed.length) say(failed.length > 1 ? t('{first} (and {n} more)', { first: failed[0], n: failed.length - 1 }) : failed[0])
     },
     [doc.width, doc.height, set, say],
   )
 
   const addStructure = useCallback(
     (smiles: string, color: boolean, image: StructureImage) => {
-      const item = newImage(image.src, image.w, image.h, { x: doc.width / 2, y: doc.height / 2 }, { smiles, smilesColor: color, name: 'Structure' }, 220)
+      const item = newImage(image.src, image.w, image.h, { x: doc.width / 2, y: doc.height / 2 }, { smiles, smilesColor: color, name: t('Structure') }, 220)
       set((d) => ({ ...d, items: [...d.items, item] }))
       setSelection([item.id])
       setTool('select')
@@ -303,7 +305,7 @@ export default function App() {
         }))
         return true
       } catch (err) {
-        say(err instanceof Error ? err.message : 'Could not draw that structure.')
+        say(err instanceof Error ? err.message : t('Could not draw that structure.'))
         return false
       }
     },
@@ -349,32 +351,32 @@ export default function App() {
   const newFigure = useCallback(() => {
     set(() => emptyDoc())
     setSelection([])
-    setFitTick((t) => t + 1)
-    say('Started a new figure. Undo brings the previous one back.')
+    setFitTick((n) => n + 1)
+    say(t('Started a new figure. Undo brings the previous one back.'))
   }, [set, say])
 
   const loadExample = useCallback(() => {
     set(() => exampleDoc())
     setSelection([])
-    setFitTick((t) => t + 1)
+    setFitTick((n) => n + 1)
   }, [set])
 
   const saveProject = useCallback(() => {
     download(new Blob([serializeProject(doc)], { type: 'application/json' }), `${fileSlug(doc.title)}.plate.json`)
-    say('Project saved. Open it again from File, then Open project.')
+    say(t('Project saved. Open it again from File, then Open project.'))
   }, [doc, say])
 
   const openProject = async (file: File | undefined) => {
     if (!file) return
     const parsed = parseProject(await file.text())
     if (!parsed) {
-      say('That file is not a Plate project. Choose a .plate.json file you saved from here.')
+      say(t('That file is not a Plate project. Choose a .plate.json file you saved from here.'))
       return
     }
     set(() => parsed)
     setSelection([])
-    setFitTick((t) => t + 1)
-    say(`Opened “${parsed.title}”.`)
+    setFitTick((n) => n + 1)
+    say(t('Opened “{title}”.', { title: parsed.title }))
   }
 
   const runExport = async (kind: 'svg' | 'png', scale = 2) => {
@@ -389,11 +391,11 @@ export default function App() {
       const needsCredit = usedIcons(doc).some((m) => !m.license.startsWith('CC0'))
       say(
         needsCredit && !withCredits
-          ? 'Exported. Some icons need credit, so add the credit line from the Credits button.'
-          : 'Exported.',
+          ? t('Exported. Some icons need credit, so add the credit line from the Credits button.')
+          : t('Exported.'),
       )
     } catch (err) {
-      say(`Export failed. ${err instanceof Error ? err.message : 'Try again.'}`)
+      say(t('Export failed. {msg}', { msg: err instanceof Error ? err.message : t('Try again.') }))
     } finally {
       setBusy(false)
     }
@@ -431,7 +433,7 @@ export default function App() {
           case '[':
             return run(() => order('back'))
           case '0':
-            return run(() => setFitTick((t) => t + 1))
+            return run(() => setFitTick((n) => n + 1))
         }
         return
       }
@@ -468,10 +470,10 @@ export default function App() {
         case '-':
           return zoomBy(0.8)
         case '0':
-          return setFitTick((t) => t + 1)
+          return setFitTick((n) => n + 1)
       }
-      const t = TOOLS.find((x) => x.key.toLowerCase() === k)
-      if (t) setTool(t.id)
+      const tl = TOOLS.find((x) => x.key.toLowerCase() === k)
+      if (tl) setTool(tl.id)
     }
   })
   useEffect(() => {
@@ -492,97 +494,105 @@ export default function App() {
         <input
           className="title"
           value={doc.title}
-          aria-label="Figure title"
+          aria-label={t('Figure title')}
           maxLength={120}
           onChange={(e) => patchDoc({ title: e.target.value }, 'title')}
         />
-        <Menu label="File" icon={<Glyph name="file" size={16} />}>
-          <MenuItem onClick={newFigure}>New figure</MenuItem>
-          <MenuItem onClick={() => fileRef.current?.click()}>Open project…</MenuItem>
+        <Menu label={t('File')} icon={<Glyph name="file" size={16} />}>
+          <MenuItem onClick={newFigure}>{t('New figure')}</MenuItem>
+          <MenuItem onClick={() => fileRef.current?.click()}>{t('Open project…')}</MenuItem>
           <MenuItem onClick={saveProject} hint={`${MOD}S`}>
-            Save project
+            {t('Save project')}
           </MenuItem>
-          <MenuItem onClick={loadExample}>Load example figure</MenuItem>
+          <MenuItem onClick={loadExample}>{t('Load example figure')}</MenuItem>
         </Menu>
 
-        <Menu label="Insert" icon={<Glyph name="insert" size={16} />}>
-          <MenuItem onClick={addPanelLabel}>Panel label (A, B, C…)</MenuItem>
-          <MenuItem onClick={addScaleBar}>Scale bar</MenuItem>
-          <MenuItem onClick={() => setStructureOpen(true)}>Chemical structure from SMILES…</MenuItem>
-          <MenuItem onClick={() => imageRef.current?.click()}>Image or SVG…</MenuItem>
+        <Menu label={t('Insert')} icon={<Glyph name="insert" size={16} />}>
+          <MenuItem onClick={addPanelLabel}>{t('Panel label (A, B, C…)')}</MenuItem>
+          <MenuItem onClick={addScaleBar}>{t('Scale bar')}</MenuItem>
+          <MenuItem onClick={() => setStructureOpen(true)}>{t('Chemical structure from SMILES…')}</MenuItem>
+          <MenuItem onClick={() => imageRef.current?.click()}>{t('Image or SVG…')}</MenuItem>
         </Menu>
 
-        <div className="cluster tools" role="toolbar" aria-label="Tools">
-          {TOOLS.map((t) => (
+        <div className="cluster tools" role="toolbar" aria-label={t('Tools')}>
+          {TOOLS.map((tl) => (
             <button
-              key={t.id}
+              key={tl.id}
               type="button"
               className="icon-btn"
-              aria-pressed={tool === t.id}
-              title={`${t.label} (${t.key})`}
-              aria-label={t.label}
-              onClick={() => setTool(t.id)}
+              aria-pressed={tool === tl.id}
+              title={`${t(tl.label)} (${tl.key})`}
+              aria-label={t(tl.label)}
+              onClick={() => setTool(tl.id)}
             >
-              <Glyph name={t.icon} />
+              <Glyph name={tl.icon} />
             </button>
           ))}
         </div>
 
-        <div className="cluster" role="group" aria-label="History">
-          <button type="button" className="icon-btn" title={`Undo (${MOD}Z)`} aria-label="Undo" disabled={!canUndo} onClick={undo}>
+        <div className="cluster" role="group" aria-label={t('History')}>
+          <button type="button" className="icon-btn" title={`${t('Undo')} (${MOD}Z)`} aria-label={t('Undo')} disabled={!canUndo} onClick={undo}>
             <Glyph name="undo" />
           </button>
-          <button type="button" className="icon-btn" title={`Redo (${MOD}⇧Z)`} aria-label="Redo" disabled={!canRedo} onClick={redo}>
+          <button type="button" className="icon-btn" title={`${t('Redo')} (${MOD}⇧Z)`} aria-label={t('Redo')} disabled={!canRedo} onClick={redo}>
             <Glyph name="redo" />
           </button>
         </div>
 
-        <div className="cluster zoom" role="group" aria-label="View">
-          <button type="button" className="icon-btn" aria-label="Zoom out" title="Zoom out (−)" onClick={() => zoomBy(0.8)}>
+        <div className="cluster zoom" role="group" aria-label={t('View')}>
+          <button type="button" className="icon-btn" aria-label={t('Zoom out')} title={`${t('Zoom out')} (−)`} onClick={() => zoomBy(0.8)}>
             <Glyph name="minus" />
           </button>
-          <button type="button" className="zoom-readout" title="Reset to 100%" onClick={() => setZoom(1)}>
+          <button type="button" className="zoom-readout" title={t('Reset to 100%')} onClick={() => setZoom(1)}>
             {Math.round(zoom * 100)}%
           </button>
-          <button type="button" className="icon-btn" aria-label="Zoom in" title="Zoom in (+)" onClick={() => zoomBy(1.25)}>
+          <button type="button" className="icon-btn" aria-label={t('Zoom in')} title={`${t('Zoom in')} (+)`} onClick={() => zoomBy(1.25)}>
             <Glyph name="plus" />
           </button>
-          <button type="button" className="icon-btn" aria-label="Fit board to window" title={`Fit to window (${MOD}0)`} onClick={() => setFitTick((t) => t + 1)}>
+          <button type="button" className="icon-btn" aria-label={t('Fit board to window')} title={`${t('Fit to window')} (${MOD}0)`} onClick={() => setFitTick((n) => n + 1)}>
             <Glyph name="fit" />
           </button>
-          <button type="button" className="icon-btn" aria-label="Show grid" aria-pressed={showGrid} title="Show grid" onClick={() => setShowGrid((v) => !v)}>
+          <button type="button" className="icon-btn" aria-label={t('Show grid')} aria-pressed={showGrid} title={t('Show grid')} onClick={() => setShowGrid((v) => !v)}>
             <Glyph name="grid" />
           </button>
-          <button type="button" className="icon-btn" aria-label="Snap to grid" aria-pressed={snap} title="Snap to grid" onClick={() => setSnap((v) => !v)}>
+          <button type="button" className="icon-btn" aria-label={t('Snap to grid')} aria-pressed={snap} title={t('Snap to grid')} onClick={() => setSnap((v) => !v)}>
             <Glyph name="snap" />
           </button>
         </div>
 
+        <Menu label={lang.toUpperCase()} icon={<Glyph name="globe" size={16} />} aria-label={t('Language')}>
+          {LANGS.map((l) => (
+            <MenuItem key={l.id} onClick={() => setLang(l.id)} hint={getLang() === l.id ? '✓' : undefined}>
+              {l.name}
+            </MenuItem>
+          ))}
+        </Menu>
+
         <button type="button" className="btn" onClick={() => setCreditsOpen(true)}>
           <Glyph name="credit" size={16} />
-          <span>Credits{creditCount ? ` (${creditCount})` : ''}</span>
+          <span>{t('Credits')}{creditCount ? ` (${creditCount})` : ''}</span>
         </button>
 
-        <Menu label={busy ? 'Exporting…' : 'Export'} icon={<Glyph name="download" size={16} />} align="right" primary>
+        <Menu label={busy ? t('Exporting…') : t('Export')} icon={<Glyph name="download" size={16} />} align="right" primary>
           <MenuItem onClick={() => void runExport('svg')} disabled={busy}>
-            SVG, editable vectors
+            {t('SVG, editable vectors')}
           </MenuItem>
           <MenuItem onClick={() => void runExport('png', 1)} disabled={busy}>
-            PNG, 1× size
+            {t('PNG, 1× size')}
           </MenuItem>
           <MenuItem onClick={() => void runExport('png', 2)} disabled={busy}>
-            PNG, 2× (screens)
+            {t('PNG, 2× (screens)')}
           </MenuItem>
           <MenuItem onClick={() => void runExport('png', 4)} disabled={busy}>
-            PNG, 4× (print)
+            {t('PNG, 4× (print)')}
           </MenuItem>
         </Menu>
 
-        <div className="cluster panel-toggles" role="group" aria-label="Panels">
-          <button type="button" className="icon-btn" aria-label="Icon library" aria-pressed={panel === 'left'} onClick={() => setPanel((p) => (p === 'left' ? null : 'left'))}>
+        <div className="cluster panel-toggles" role="group" aria-label={t('Panels')}>
+          <button type="button" className="icon-btn" aria-label={t('Icon library')} aria-pressed={panel === 'left'} onClick={() => setPanel((p) => (p === 'left' ? null : 'left'))}>
             <Glyph name="panelLeft" />
           </button>
-          <button type="button" className="icon-btn" aria-label="Properties" aria-pressed={panel === 'right'} onClick={() => setPanel((p) => (p === 'right' ? null : 'right'))}>
+          <button type="button" className="icon-btn" aria-label={t('Properties')} aria-pressed={panel === 'right'} onClick={() => setPanel((p) => (p === 'right' ? null : 'right'))}>
             <Glyph name="panelRight" />
           </button>
         </div>
@@ -639,7 +649,7 @@ export default function App() {
         onClose={() => setCreditsOpen(false)}
         withCredits={withCredits}
         setWithCredits={setWithCredits}
-        onCopied={(ok) => say(ok ? 'Credit line copied.' : 'Could not copy. Select the text and copy it by hand.')}
+        onCopied={(ok) => say(ok ? t('Credit line copied.') : t('Could not copy. Select the text and copy it by hand.'))}
       />
 
       <StructureDialog open={structureOpen} onClose={() => setStructureOpen(false)} onAdd={addStructure} />

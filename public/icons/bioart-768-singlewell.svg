@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 500 500">
+  <!-- Generator: Adobe Illustrator 30.4.0, SVG Export Plug-In . SVG Version: 2.1.4 Build 226)  -->
+  <defs>
+    <style>
+      .st0 {
+        clip-path: url(#clippath-4);
+      }
+
+      .st1 {
+        clip-path: url(#clippath-1);
+      }
+
+      .st2 {
+        isolation: isolate;
+      }
+
+      .st3 {
+        fill: none;
+      }
+
+      .st3, .st4 {
+        stroke: #636565;
+        stroke-miterlimit: 10;
+        stroke-width: 6.671px;
+      }
+
+      .st5, .st4 {
+        fill: #f0f0f2;
+      }
+
+      .st6 {
+        mix-blend-mode: color;
+      }
+
+      .st7 {
+        fill: #eaa0ce;
+      }
+    </style>
+    <clipPath id="clippath-1">
+      <rect class="st4" x="155.569" y="120.928" width="169.038" height="241.899"/>
+    </clipPath>
+    <clipPath id="clippath-4">
+      <rect class="st4" x="155.569" y="120.928" width="169.038" height="241.899"/>
+    </clipPath>
+  </defs>
+  <g class="st2">
+    <g id="SingleWell0001">
+      <g>
+        <rect class="st5" x="155.569" y="120.928" width="169.038" height="241.899"/>
+        <g class="st1">
+          <rect class="st7" x="103.442" y="233.814" width="264.937" height="145.14"/>
+        </g>
+        <rect class="st3" x="155.569" y="120.928" width="169.038" height="241.899"/>
+      </g>
+      <g class="st6">
+        <g>
+          <rect class="st5" x="155.569" y="120.928" width="169.038" height="241.899"/>
+          <g class="st0">
+            <rect class="st7" x="103.442" y="233.814" width="264.937" height="145.14"/>
+          </g>
+          <rect class="st3" x="155.569" y="120.928" width="169.038" height="241.899"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

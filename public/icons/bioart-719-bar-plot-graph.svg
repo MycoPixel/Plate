@@ -1,0 +1,98 @@
+<svg id="Graph0003" xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 500 500">
+  <!-- Generator: Adobe Illustrator 30.4.0, SVG Export Plug-In . SVG Version: 2.1.4 Build 226)  -->
+  <defs>
+    <style>
+      .st0 {
+        stroke-width: 3.368px;
+      }
+
+      .st0, .st1 {
+        fill: none;
+        stroke: #000;
+        stroke-miterlimit: 10;
+      }
+
+      .st2 {
+        fill: #8dc63f;
+      }
+
+      .st3 {
+        fill: #f7941d;
+      }
+
+      .st4 {
+        clip-path: url(#clippath-1);
+      }
+
+      .st5 {
+        fill: #84b4db;
+      }
+
+      .st6 {
+        fill: #c7c8ca;
+      }
+
+      .st7 {
+        fill: #a7a9ac;
+      }
+
+      .st1 {
+        stroke-width: 2.586px;
+      }
+
+      .st8 {
+        fill: #c2b59b;
+      }
+
+      .st9 {
+        clip-path: url(#clippath-2);
+      }
+
+      .st10 {
+        clip-path: url(#clippath);
+      }
+
+      .st11 {
+        fill: #2379be;
+      }
+    </style>
+    <clipPath id="clippath">
+      <rect class="st6" x="143.527" y="116.072" width="61.607" height="284.598"/>
+    </clipPath>
+    <clipPath id="clippath-1">
+      <rect class="st6" x="220.759" y="116.072" width="61.607" height="284.598"/>
+    </clipPath>
+    <clipPath id="clippath-2">
+      <rect class="st6" x="297.991" y="116.072" width="61.607" height="284.598"/>
+    </clipPath>
+  </defs>
+  <g>
+    <rect class="st6" x="143.527" y="116.072" width="61.607" height="284.598"/>
+    <g class="st10">
+      <rect class="st1" x="138.17" y="103.348" width="73.661" height="70.982"/>
+      <rect class="st7" x="138.17" y="168.304" width="73.661" height="87.053"/>
+      <rect class="st11" x="138.17" y="241.295" width="73.661" height="54.911"/>
+      <rect class="st5" x="138.17" y="294.196" width="73.661" height="63.616"/>
+      <rect class="st2" x="138.17" y="355.134" width="73.661" height="63.616"/>
+    </g>
+  </g>
+  <g>
+    <rect class="st6" x="220.759" y="116.072" width="61.607" height="284.598"/>
+    <g class="st4">
+      <rect class="st1" x="215.402" y="103.348" width="73.661" height="70.982"/>
+      <rect class="st7" x="215.402" y="159.598" width="73.661" height="95.759"/>
+      <rect class="st8" x="215.402" y="226.116" width="73.661" height="117.411"/>
+      <rect class="st2" x="215.402" y="339.062" width="73.661" height="79.687"/>
+    </g>
+  </g>
+  <g>
+    <rect class="st6" x="297.991" y="116.072" width="61.607" height="284.598"/>
+    <g class="st9">
+      <rect class="st1" x="292.634" y="103.348" width="73.661" height="70.982"/>
+      <rect class="st7" x="292.634" y="166.964" width="73.661" height="102.678"/>
+      <rect class="st3" x="292.634" y="263.839" width="73.661" height="57.143"/>
+      <rect class="st2" x="292.634" y="315.178" width="73.661" height="103.571"/>
+    </g>
+  </g>
+  <polyline class="st0" points="119.42 99.331 119.42 400.446 380.58 400.446"/>
+</svg>

@@ -7,12 +7,14 @@ export function Menu({
   children,
   align = 'left',
   primary = false,
+  'aria-label': ariaLabel,
 }: {
   label: string
   icon?: ReactNode
   children: ReactNode
   align?: 'left' | 'right'
   primary?: boolean
+  'aria-label'?: string
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -38,6 +40,7 @@ export function Menu({
       <button
         type="button"
         className={primary ? 'btn btn-primary' : 'btn'}
+        aria-label={ariaLabel}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}

@@ -12,6 +12,16 @@ export type IconMeta = {
   author: string
   authorUrl: string
   source: string
+  /** Collection the artwork was published in (NIH BioArt Source only). */
+  collection?: string
+  /** Submission date as the collection lists it, e.g. 10/7/2024 (NIH BioArt Source only). */
+  date?: string
+  /** DOI the collection links to, for the entries that have one. */
+  doi?: string
+  /** Where the drawing was found, when that is not the author to credit. */
+  via?: string
+  /** Extra words to search, when the source ships its own keywords. */
+  tags?: string[]
 }
 
 type Flags = { hidden?: boolean; locked?: boolean; group?: string }

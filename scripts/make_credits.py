@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
-"""Regenerate ICON_CREDITS.md from src/icons.json.   Usage: python3 scripts/make_credits.py ."""
-import collections, json, sys
+"""Regenerate ICON_CREDITS.md from src/icons.json and src/icons.bioart.json.
+
+Usage: python3 scripts/make_credits.py .
+"""
+import collections, json, os, sys
 
 APP = sys.argv[1] if len(sys.argv) > 1 else "."
 d = json.load(open(f"{APP}/src/icons.json"))
@@ -8,11 +11,31 @@ authors, icons = d["authors"], d["icons"]
 LIC = {
     "cc0": ("CC0 1.0", "https://creativecommons.org/publicdomain/zero/1.0/"),
     "mit": ("MIT", "https://opensource.org/licenses/MIT"),
+    "pd": ("Public Domain", "https://creativecommons.org/publicdomain/mark/1.0/"),
+    "by25": ("CC BY 2.5", "https://creativecommons.org/licenses/by/2.5/"),
     "by3": ("CC BY 3.0", "https://creativecommons.org/licenses/by/3.0/"),
     "by4": ("CC BY 4.0", "https://creativecommons.org/licenses/by/4.0/"),
 }
 n_lic = collections.Counter(i["license"] for i in icons)
 cats = len({i["category"] for i in icons})
+
+bioart_path = f"{APP}/src/icons.bioart.json"
+bioart = json.load(open(bioart_path))["icons"] if os.path.exists(bioart_path) else []
+n_bioart_lic = collections.Counter(i["license"] for i in bioart)
+bioart_cats = len({i["category"] for i in bioart})
+
+commons_path = f"{APP}/src/icons.commons.json"
+commons = json.load(open(commons_path))["icons"] if os.path.exists(commons_path) else []
+n_commons_lic = collections.Counter(i["license"] for i in commons)
+commons_cats = len({i["category"] for i in commons})
+
+health_path = f"{APP}/src/icons.healthicons.json"
+health = json.load(open(health_path))["icons"] if os.path.exists(health_path) else []
+
+phylopic_path = f"{APP}/src/icons.phylopic.json"
+phylopic = json.load(open(phylopic_path))["icons"] if os.path.exists(phylopic_path) else []
+n_phylopic_lic = collections.Counter(i["license"] for i in phylopic)
+CC0 = "https://creativecommons.org/publicdomain/zero/1.0/"
 
 
 def esc(s):
@@ -44,5 +67,105 @@ for i in icons:
     au = f"[{esc(a)}]({authors[a]})" if authors.get(a) else esc(a)
     name, url = LIC[i["license"]]
     out.append(f"| {esc(i['label'])} | {i['category']} | {au} | [{name}]({url}) | `public/icons/{i['id']}.svg` |")
+
+if bioart:
+    out += [
+        "",
+        "## NIH BioArt Source",
+        "",
+        f"The other {len(bioart)} illustrations in `public/icons/` ({bioart_cats} categories) come from the",
+        "[NIH BioArt Source](https://bioart.niaid.nih.gov), the medical art collection of the US National Institute of Allergy",
+        "and Infectious Diseases. They are free for any use, including commercial, per its",
+        "[terms](https://bioart.niaid.nih.gov/terms). The site asks that the entry a drawing comes from is named, which is what",
+        "the credit line does for every figure that uses one.",
+        "",
+        f"- **Public Domain** ({n_bioart_lic['pd']} illustrations): made for NIAID, so no credit is required. The credit line is still written.",
+        f"- **CC BY 4.0** ({n_bioart_lic['by4']} illustrations): from the Human Reference Atlas. Credit the creator, link the license,",
+        "  and say if the artwork was changed; recoloring counts as a change. Cite the entry DOI when it has one.",
+        "",
+        "Import with `python3 scripts/fetch_bioart.py .`, which stores what it downloads in `src/icons.bioart.json`.",
+        "",
+        "| Illustration | Category | Creator | License | Entry | File |",
+        "|---|---|---|---|---|---|",
+    ]
+    for i in bioart:
+        if i["license"] == "pd":
+            lic = "[Public Domain](https://bioart.niaid.nih.gov/faqs#usage-restrictions-bioart)"
+        else:
+            name, url = LIC[i["license"]]
+            lic = f"[{name}]({url})"
+        entry = f"[bioart/{i['entry']}](https://bioart.niaid.nih.gov/bioart/{i['entry']})"
+        extra = f" / [{i['doi']}](https://doi.org/{i['doi']})" if i["doi"] else ""
+        out.append(
+            f"| {esc(i['label'])} | {i['category']} | {esc(i['author'])} | {lic}{extra} | {entry} | `public/icons/{i['id']}.svg` |"
+        )
+
+if commons:
+    out += [
+        "",
+        "## Wikimedia Commons",
+        "",
+        f"The other {len(commons)} drawings in `public/icons/` ({commons_cats} categories) were taken from",
+        "[Wikimedia Commons](https://commons.wikimedia.org), mostly the glassware and laboratory equipment icon sets.",
+        "Each one keeps the license its file page states; only public domain, CC0 and CC BY drawings are included.",
+        "Share-alike, non-commercial and unknown licenses were left out, and so was `scripts/commons_block.txt`,",
+        "which lists icon-pack leftovers, non-English names and colour variants. Credit the author and link the file.",
+        "",
+        "Import with `python3 scripts/fetch_commons.py .`; the file metadata it reads is cached in `.cache/commons`.",
+        "",
+        "| Drawing | Category | Author | License | File |",
+        "|---|---|---|---|---|",
+    ]
+    for i in commons:
+        url = i.get("licenseUrl") or LIC[i["license"]][1]
+        out.append(
+            f"| {esc(i['label'])} | {i['category']} | {esc(i['author'])} | [{esc(LIC[i['license']][0])}]({url})"
+            f" | [`{i['file']}`](https://commons.wikimedia.org/wiki/{i['file'].replace(' ', '_')}) |"
+        )
+
+if phylopic:
+    out += [
+        "",
+        "## PhyloPic",
+        "",
+        f"The other {len(phylopic)} silhouettes in `public/icons/` are silhouettes of living things from",
+        "[PhyloPic](https://www.phylopic.org), a community library of flat shapes for figures. Each one is",
+        "credited to the person who drew it, under the license the collection lists for it.",
+        "",
+        f"- **Public domain / CC0** ({n_phylopic_lic['pd'] + n_phylopic_lic['cc0']} silhouettes): no credit needed, still given.",
+        f"- **CC BY 3.0 / 4.0** ({n_phylopic_lic['by3'] + n_phylopic_lic['by4']} silhouettes): credit the contributor and say if it was changed.",
+        "",
+        "Import with `python3 scripts/fetch_phylopic.py .`; the answers it gets are cached in `.cache/phylopic`.",
+        "",
+        "| Organism | Category | Contributor | License | File |",
+        "|---|---|---|---|---|",
+    ]
+    for i in phylopic:
+        out.append(
+            f"| {esc(i['label'])} | {i['category']} | {esc(i['author'])} | [{LIC[i['license']][0]}]({i.get('licenseUrl', LIC[i['license']][1])})"
+            f" | `public/icons/{i['id']}.svg` ([page](https://www.phylopic.org/images/{i['uuid']})) |"
+        )
+
+if health:
+    out += [
+        "",
+        "## Health Icons",
+        "",
+        f"The last {len(health)} icons in `public/icons/` are from [Health Icons](https://healthicons.org), the icon set of the",
+        "public health non-profit Resolve to Save Lives. **The drawings are CC0**: free for any use, no credit required,",
+        "editing and redistribution fine. The credit line names them anyway, with the icon page.",
+        "",
+        "Import with `python3 scripts/fetch_healthicons.py .`; the metadata it reads is cached in `.cache/healthicons`.",
+        "",
+        "| Icon | Category | Source category | License | File |",
+        "|---|---|---|---|---|",
+    ]
+    for i in health:
+        page = i["source"] if "source" in i else f"https://healthicons.org/icon/{i['style']}/{i['healthCategory']}/{i['id'].replace('health-', '')}"
+        out.append(
+            f"| {esc(i['label'])} | {i['category']} | {i['healthCategory']} | [CC0 1.0]({CC0})"
+            f" | `public/icons/{i['id']}.svg` ([page]({page})) |"
+        )
+
 open(f"{APP}/ICON_CREDITS.md", "w", encoding="utf-8").write("\n".join(out) + "\n")
-print("wrote ICON_CREDITS.md with", len(icons), "icons")
+print(f"wrote ICON_CREDITS.md with {len(icons)} + {len(bioart)} + {len(commons)} + {len(phylopic)} + {len(health)} icons")

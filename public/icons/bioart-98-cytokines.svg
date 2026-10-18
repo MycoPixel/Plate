@@ -1,0 +1,46 @@
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 500 500">
+  <ns0:defs>
+    <ns0:style>
+      .cls-1 {
+        opacity: .34;
+        stroke-width: 1.79px;
+      }
+
+      .cls-1, .cls-2, .cls-3 {
+        fill: #84b7e3;
+        stroke: #000;
+        stroke-miterlimit: 10;
+      }
+
+      .cls-2 {
+        opacity: .55;
+        stroke-width: 3.08px;
+      }
+
+      .cls-3 {
+        stroke-width: 4.62px;
+      }
+    </ns0:style>
+  </ns0:defs>
+  
+  <ns0:g>
+    <ns0:g id="Cytokines">
+      <ns0:circle class="cls-3" cx="284.14" cy="301.8" r="28.43" />
+      <ns0:circle class="cls-3" cx="230.83" cy="246.36" r="28.43" />
+      <ns0:circle class="cls-3" cx="183.81" cy="381.04" r="28.43" />
+      <ns0:circle class="cls-3" cx="371.09" cy="261.53" r="28.43" />
+      <ns0:circle class="cls-3" cx="262.71" cy="108.52" r="28.43" />
+      <ns0:circle class="cls-2" cx="152.17" cy="321.47" r="20.14" />
+      <ns0:circle class="cls-2" cx="314.94" cy="211.3" r="20.14" />
+      <ns0:circle class="cls-2" cx="254.37" cy="175.44" r="20.14" />
+      <ns0:circle class="cls-2" cx="150.04" cy="173.63" r="20.14" />
+      <ns0:circle class="cls-2" cx="381.13" cy="140.95" r="20.14" />
+      <ns0:circle class="cls-1" cx="425.28" cy="199.6" r="11.69" />
+      <ns0:circle class="cls-1" cx="116.89" cy="254.59" r="11.69" />
+      <ns0:circle class="cls-1" cx="79.43" cy="380.49" r="11.69" />
+      <ns0:circle class="cls-1" cx="172.67" cy="261.76" r="11.69" />
+      <ns0:circle class="cls-1" cx="363.12" cy="332.68" r="11.69" />
+      <ns0:circle class="cls-2" cx="223.96" cy="336.4" r="20.14" />
+    </ns0:g>
+  </ns0:g>
+  </ns0:svg>

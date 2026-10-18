@@ -1,0 +1,42 @@
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 500 500">
+  <ns0:defs>
+    <ns0:style>
+      .cls-1 {
+        fill: none;
+      }
+
+      .cls-1, .cls-2 {
+        stroke: #888589;
+        stroke-miterlimit: 10;
+        stroke-width: 2.95px;
+      }
+
+      .cls-3, .cls-2 {
+        fill: #c5b7c6;
+      }
+
+      .cls-4 {
+        fill: #ded4e0;
+      }
+
+      .cls-5 {
+        clip-path: url(#clippath);
+      }
+    </ns0:style>
+    <ns0:clipPath id="clippath">
+      <ns0:ellipse class="cls-2" cx="250" cy="250" rx="128.5" ry="137.28" transform="translate(-58.65 422.43) rotate(-74.19)" />
+    </ns0:clipPath>
+  </ns0:defs>
+  
+  <ns0:g>
+    <ns0:g id="Layer_1">
+      <ns0:g>
+        <ns0:ellipse class="cls-3" cx="250" cy="250" rx="128.5" ry="137.28" transform="translate(-58.65 422.43) rotate(-74.19)" />
+        <ns0:g class="cls-5">
+          <ns0:ellipse class="cls-4" cx="243.37" cy="250" rx="117.29" ry="117.23" transform="translate(-63.48 416.04) rotate(-74.19)" />
+        </ns0:g>
+        <ns0:ellipse class="cls-1" cx="250" cy="250" rx="128.5" ry="137.28" transform="translate(-58.65 422.43) rotate(-74.19)" />
+      </ns0:g>
+    </ns0:g>
+  </ns0:g>
+</ns0:svg>

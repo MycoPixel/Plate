@@ -18,6 +18,7 @@ import {
 import { expandGroups } from './groups'
 import { getIcon, ICON_BY_ID, iconDataUri, resolveColors, scopeIds, useIconCacheVersion } from './icons'
 import { newArrow, newShape } from './defaults'
+import { t, useLang } from './i18n'
 import { ICON_MIME } from './Palette'
 import type { ArrowItem, Doc, Handle, IconItem, ImageItem, Item, Pt, Rect, ShapeItem, TextItem, Tool } from './types'
 import { clamp, isFormTarget } from './util'
@@ -342,6 +343,7 @@ export type CanvasProps = {
 }
 
 export function Canvas(props: CanvasProps) {
+  useLang()
   const { doc, selection, tool, zoom, snap, showGrid, setSelection, setDoc, checkpoint } = props
   const iconsV = useIconCacheVersion()
   const svgRef = useRef<SVGSVGElement>(null)
@@ -446,8 +448,8 @@ export function Canvas(props: CanvasProps) {
     }
     if (e.button !== 0) return
     // Ignore presses on the scrollbars and on the empty-state buttons.
-    const t = e.target as Element
-    if (t.closest('button')) return
+    const target = e.target as Element
+    if (target.closest('button')) return
     if (e.clientX > stage.getBoundingClientRect().left + stage.clientWidth) return
     if (e.clientY > stage.getBoundingClientRect().top + stage.clientHeight) return
 
@@ -464,7 +466,7 @@ export function Canvas(props: CanvasProps) {
       return
     }
 
-    const handle = t.closest('[data-handle]')?.getAttribute('data-handle')
+    const handle = target.closest('[data-handle]')?.getAttribute('data-handle')
     const only = selected.length === 1 ? selected[0] : null
     if (handle && only) {
       if (handle === 'rotate' && only.type !== 'arrow') {
@@ -492,7 +494,7 @@ export function Canvas(props: CanvasProps) {
       }
     }
 
-    const id = t.closest('[data-id]')?.getAttribute('data-id') ?? null
+    const id = target.closest('[data-id]')?.getAttribute('data-id') ?? null
     const item = id ? doc.items.find((i) => i.id === id) : undefined
     if (id && item && !item.locked) {
       const members = expandGroups(doc.items, [id])
@@ -713,7 +715,7 @@ export function Canvas(props: CanvasProps) {
             height={H}
             viewBox={`0 0 ${doc.width} ${doc.height}`}
             role="img"
-            aria-label={`Figure board, ${doc.width} by ${doc.height}`}
+            aria-label={t('Figure board, {w} by {h}', { w: doc.width, h: doc.height })}
           >
             <defs>
               <pattern id="dots" width={GRID * 2} height={GRID * 2} patternUnits="userSpaceOnUse">
@@ -740,12 +742,12 @@ export function Canvas(props: CanvasProps) {
 
           {doc.items.length === 0 && (
             <div className="empty">
-              <h2>Start with an icon</h2>
+              <h2>{t('Start with an icon')}</h2>
               <p>
-                Click or drag anything from the library on the left. Add labels and arrows from the toolbar above.
+                {t('Click or drag anything from the library on the left. Add labels and arrows from the toolbar above.')}
               </p>
               <button type="button" className="btn" onClick={props.onExample}>
-                Load an example figure
+                {t('Load an example figure')}
               </button>
             </div>
           )}

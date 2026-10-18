@@ -719,6 +719,7 @@ input[type='checkbox'] {
   }
   .workspace {
     grid-template-columns: minmax(0, 1fr);
+    overflow: clip; /* closed drawers sit off-screen and must not widen the page */
   }
   .side {
     position: absolute;

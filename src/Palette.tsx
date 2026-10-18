@@ -1,26 +1,43 @@
 import { useMemo, useState } from 'react'
 import { Glyph } from './Glyph'
 import { CATEGORIES, ICONS, iconUrl } from './icons'
+import { categoryLabel, iconLabel, iconNameEs, t, useLang } from './i18n'
 
 export const ICON_MIME = 'application/x-plate-icon'
 
 const badge = (license: string) => (license.startsWith('CC0') ? 'CC0' : 'BY')
 
+/** Search text without case or accents, so "celula" finds "célula" and "neutrofilo" the drawing. */
+const fold = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+
 export function Palette({ onAdd }: { onAdd: (iconId: string) => void }) {
   const [q, setQ] = useState('')
   const [cat, setCat] = useState('All')
+  const lang = useLang()
 
   const list = useMemo(() => {
-    const s = q.trim().toLowerCase()
+    const s = fold(q.trim())
     return ICONS.filter(
       (i) =>
         (cat === 'All' || i.category === cat) &&
         (!s ||
-          i.label.toLowerCase().includes(s) ||
-          i.category.toLowerCase().includes(s) ||
-          i.author.toLowerCase().includes(s)),
+          fold(i.label).includes(s) ||
+          fold(i.category).includes(s) ||
+          fold(i.author).includes(s) ||
+          (i.tags ?? []).some((tag) => fold(tag).includes(s)) ||
+          fold(categoryLabel(i.category)).includes(s) ||
+          (lang === 'es' && fold(iconNameEs(i.id) ?? '').includes(s))),
     )
-  }, [q, cat])
+  }, [q, cat, lang])
+
+  const categories = useMemo(
+    () => [...CATEGORIES].sort((a, b) => categoryLabel(a).localeCompare(categoryLabel(b), lang)),
+    [lang],
+  )
 
   const counts = useMemo(() => {
     const m = new Map<string, number>()
@@ -29,23 +46,23 @@ export function Palette({ onAdd }: { onAdd: (iconId: string) => void }) {
   }, [])
 
   return (
-    <aside className="palette" aria-label="Icon library">
+    <aside className="palette" aria-label={t('Icon library')}>
       <div className="palette-head">
         <label className="search">
           <Glyph name="search" size={16} />
           <input
             type="search"
-            placeholder="Search icons"
-            aria-label="Search icons"
+            placeholder={t('Search icons')}
+            aria-label={t('Search icons')}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
         </label>
-        <select aria-label="Category" value={cat} onChange={(e) => setCat(e.target.value)}>
-          <option value="All">All categories ({ICONS.length})</option>
-          {CATEGORIES.map((c) => (
+        <select aria-label={t('Category')} value={cat} onChange={(e) => setCat(e.target.value)}>
+          <option value="All">{t('All categories ({n})', { n: ICONS.length })}</option>
+          {categories.map((c) => (
             <option key={c} value={c}>
-              {c} ({counts.get(c)})
+              {categoryLabel(c)} ({counts.get(c)})
             </option>
           ))}
         </select>
@@ -58,30 +75,32 @@ export function Palette({ onAdd }: { onAdd: (iconId: string) => void }) {
             type="button"
             className="tile"
             draggable
-            title={`${i.label}, by ${i.author} (${i.license})`}
-            aria-label={`Add ${i.label}`}
+            title={t('{name}, by {author} ({license})', { name: iconLabel(i), author: i.author, license: i.license })}
+            aria-label={t('Add {name}', { name: iconLabel(i) })}
             onClick={() => onAdd(i.id)}
             onDragStart={(e) => {
               e.dataTransfer.setData(ICON_MIME, i.id)
-              e.dataTransfer.setData('text/plain', i.label)
+              e.dataTransfer.setData('text/plain', iconLabel(i))
               e.dataTransfer.effectAllowed = 'copy'
             }}
           >
             <img src={iconUrl(i)} alt="" loading="lazy" draggable={false} />
-            <span className="tile-name">{i.label}</span>
+            <span className="tile-name">{iconLabel(i)}</span>
             <span className="tile-lic" data-lic={badge(i.license)}>
               {badge(i.license)}
             </span>
           </button>
         ))}
         {list.length === 0 && (
-          <p className="note">No icons match “{q}”. Try a broader word, like “cell” or “tube”.</p>
+          <p className="note">{t('No icons match “{q}”. Try a broader word, like “cell” or “tube”.', { q })}</p>
         )}
       </div>
 
       <p className="palette-foot">
-        {list.length} of {ICONS.length} icons. Click to add, or drag onto the board. Credits for the
-        icons you use are written for you.
+        {t('{n} of {total} icons. Click to add, or drag onto the board. Credits for the icons you use are written for you.', {
+          n: list.length,
+          total: ICONS.length,
+        })}
       </p>
     </aside>
   )

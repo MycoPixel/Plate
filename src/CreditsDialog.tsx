@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { creditsText, usedIcons } from './credits'
 import { Glyph } from './Glyph'
 import { iconUrl } from './icons'
+import { iconLabel, t, useLang } from './i18n'
 import type { Doc } from './types'
 
 export function CreditsDialog({
@@ -20,6 +21,7 @@ export function CreditsDialog({
   onCopied: (ok: boolean) => void
 }) {
   const ref = useRef<HTMLDialogElement>(null)
+  useLang()
 
   useEffect(() => {
     const d = ref.current
@@ -44,31 +46,29 @@ export function CreditsDialog({
     <dialog ref={ref} className="dialog" onClose={onClose} onClick={(e) => e.target === ref.current && onClose()}>
       <div className="dialog-body">
         <header className="dialog-head">
-          <h2>Credits for this figure</h2>
-          <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
+          <h2>{t('Credits for this figure')}</h2>
+          <button type="button" className="icon-btn" aria-label={t('Close')} onClick={onClose}>
             <Glyph name="close" />
           </button>
         </header>
 
         {used.length === 0 ? (
           <p className="note">
-            No library icons are on the board yet. When you add some, the author and license of each one will
-            be listed here.
+            {t('No library icons are on the board yet. When you add some, the author and license of each one will be listed here.')}
           </p>
         ) : (
           <>
             <p className="note">
-              Most icons are free to use but ask for credit. Put this line in your figure legend or slide
-              notes, or let the export add it under the figure.
+              {t('Most icons are free to use but ask for credit. Put this line in your figure legend or slide notes, or let the export add it under the figure.')}
             </p>
             <ul className="credit-list">
               {used.map((m) => (
                 <li key={m.id}>
                   <img src={iconUrl(m)} alt="" />
                   <div>
-                    <strong>{m.label}</strong>
+                    <strong>{iconLabel(m)}</strong>
                     <span>
-                      by{' '}
+                      {t('by')}{' '}
                       {m.authorUrl ? (
                         <a href={m.authorUrl} target="_blank" rel="noreferrer">
                           {m.author}
@@ -80,23 +80,27 @@ export function CreditsDialog({
                       <a href={m.licenseUrl} target="_blank" rel="noreferrer">
                         {m.license}
                       </a>
+                      ,{' '}
+                      <a href={m.source} target="_blank" rel="noreferrer">
+                        {new URL(m.source).hostname}
+                      </a>
                     </span>
                   </div>
                 </li>
               ))}
             </ul>
             <label className="field wide">
-              <span className="sr-only">Credit line</span>
+              <span className="sr-only">{t('Credit line')}</span>
               <textarea readOnly rows={4} value={text} onFocus={(e) => e.currentTarget.select()} />
             </label>
             <label className="check">
               <input type="checkbox" checked={withCredits} onChange={(e) => setWithCredits(e.target.checked)} />
-              <span>Add the credit line under the figure when exporting</span>
+              <span>{t('Add the credit line under the figure when exporting')}</span>
             </label>
             <div className="dialog-actions">
               <button type="button" className="btn btn-primary" onClick={copy}>
                 <Glyph name="copy" size={16} />
-                <span>Copy credit line</span>
+                <span>{t('Copy credit line')}</span>
               </button>
             </div>
           </>

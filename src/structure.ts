@@ -1,3 +1,4 @@
+import { t } from './i18n'
 import { toBase64 } from './icons'
 
 export type StructureImage = { src: string; w: number; h: number }
@@ -5,8 +6,8 @@ export type StructureImage = { src: string; w: number; h: number }
 /** Draws a SMILES string as a skeletal structure and returns it as an SVG image source. */
 export async function renderSmiles(smiles: string, color = true): Promise<StructureImage> {
   const text = smiles.trim()
-  if (!text) throw new Error('Type or paste a SMILES string.')
-  if (text.length > 2000) throw new Error('That SMILES is too long.')
+  if (!text) throw new Error(t('Type or paste a SMILES string.'))
+  if (text.length > 2000) throw new Error(t('That SMILES is too long.'))
   // Loaded on demand so people who never draw a structure do not download the drawing library.
   const { default: SmilesDrawer } = await import('smiles-drawer')
   const drawer = new SmilesDrawer.SvgDrawer({ width: 600, height: 600, padding: 16, bondThickness: 1.6 })
@@ -17,10 +18,10 @@ export async function renderSmiles(smiles: string, color = true): Promise<Struct
         try {
           resolve(drawer.draw(tree, null, color ? 'light' : 'oldschool'))
         } catch (e) {
-          reject(e instanceof Error ? e : new Error('Could not draw that structure.'))
+          reject(e instanceof Error ? e : new Error(t('Could not draw that structure.')))
         }
       },
-      (e) => reject(new Error(e?.message ? `Could not read that SMILES: ${e.message}` : 'Could not read that SMILES.')),
+      (e) => reject(new Error(e?.message ? t('Could not read that SMILES: {msg}', { msg: t(e.message) }) : t('Could not read that SMILES.'))),
     )
   })
 

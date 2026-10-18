@@ -1,0 +1,87 @@
+# Drawings from Wikimedia Commons that the app leaves out, one substring per line, matched against
+# the drawing's name (case-insensitive). Used by scripts/fetch_commons.py --block.
+#
+# Most of these are files that sit in a chemistry category but are not lab drawings: icon-pack
+# leftovers, chemical structure drawings made with BKChem or ChemDraw, game icons, non-English
+# names, hazard-marker templates, clipart, and colour variants of a drawing we already have.
+
+# icon packs, web icon sets and software artefacts
+coreui
+chemdraw
+bkchem
+chemsketch
+anti-
+chemia
+chem template
+wordpresswp
+wp20symbols
+linecons
+creative-tail
+game-icons
+lorc
+papapishu
+toicon
+hex icon
+chemistrybondstar
+molecule eh
+vector molecule
+provtubo
+alchemy
+witcher
+kawaii
+font awesome
+science
+erlenmeyerkolben
+beakers en
+
+# not lab drawings
+serpentine
+photographing science icon
+idealab
+icon-experiment
+science-symbol
+chemistry icon li
+chemistry flask matthew
+alpha decay
+alfa decay
+flaskclipart
+
+# names that are not English (the same drawings exist under an English name)
+becherglas
+beakers de
+entsorgung
+experimentieren
+fyzik
+fernbachkolben
+mischzylinder
+standzylinder
+reagenzglas
+probówki
+
+# clipart and stock illustration, not something you want in a figure
+noun project
+noun-science
+blue vial clip art
+erlenmeyer flask black & white clipart
+young female scientist
+young scientist
+paomedia
+
+# colour variants: the app recolours vectors, so one drawing per object is enough
+conical flask blue
+conical flask brown
+conical flask green
+conical flask grey
+conical flask olive
+conical flask orange
+conical flask purple
+conical flask red
+conical flask teal
+conical flask yellow
+flask blue
+flask yellow
+full bottle chemistry green
+full bottle chemistry grey
+full bottle chemistry red
+full bottle chemistry violet
+full bottle chemistry yellow

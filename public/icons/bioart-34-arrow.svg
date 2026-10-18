@@ -1,0 +1,26 @@
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 500 500">
+  <ns0:defs>
+    <ns0:style>
+      .cls-1 {
+        fill: none;
+        stroke: #061838;
+        stroke-miterlimit: 10;
+        stroke-width: 10.22px;
+      }
+
+      .cls-2 {
+        fill: #061838;
+      }
+    </ns0:style>
+  </ns0:defs>
+  
+  <ns0:g>
+    <ns0:g id="Layer_1">
+      <ns0:g>
+        <ns0:path class="cls-1" d="M418.53,132.59c-40.24,124.67-153.07,224.62-298.46,266.54" />
+        <ns0:polygon class="cls-2" points="394.36 132.81 427.1 100.73 438.52 145.12 394.36 132.81" />
+        <ns0:polygon class="cls-2" points="120.71 375.06 88.1 407.28 132.31 419.42 120.71 375.06" />
+      </ns0:g>
+    </ns0:g>
+  </ns0:g>
+  </ns0:svg>

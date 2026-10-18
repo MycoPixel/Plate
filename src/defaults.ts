@@ -1,4 +1,5 @@
 import { measureText } from './geometry'
+import { t } from './i18n'
 import { ICON_BY_ID } from './icons'
 import type { ArrowItem, Doc, IconItem, IconMeta, ImageItem, Item, Pt, ShapeItem, TextItem } from './types'
 
@@ -6,6 +7,7 @@ export const uid = () => Math.random().toString(36).slice(2, 9)
 
 export const INK = '#13262F'
 
+/** Labels are English keys; show them with t(). */
 export const ARTBOARDS = [
   { id: 'landscape', label: 'Landscape, 1200 × 800', w: 1200, h: 800 },
   { id: 'slide', label: 'Slide 16:9, 1280 × 720', w: 1280, h: 720 },
@@ -15,7 +17,7 @@ export const ARTBOARDS = [
 ]
 
 export const emptyDoc = (): Doc => ({
-  title: 'Untitled figure',
+  title: t('Untitled figure'),
   width: 1200,
   height: 800,
   background: '#FFFFFF',
@@ -42,7 +44,7 @@ export function newIcon(meta: IconMeta, center: Pt, maxSize = 150): IconItem {
   }
 }
 
-export const newText = (at: Pt, text = 'Text', fontSize = 24): TextItem => ({
+export const newText = (at: Pt, text = t('Text'), fontSize = 24): TextItem => ({
   type: 'text',
   id: uid(),
   x: at.x,
@@ -117,9 +119,9 @@ export function exampleDoc(): Doc {
     return m ? newIcon(m, { x: cx, y: cy }, size) : null
   }
   const label = (text: string, cx: number, y: number, size = 22, bold = false) => {
-    const t: TextItem = { ...newText({ x: 0, y }, text, size), bold, align: 'center' }
-    t.x = cx - measureText(t).w / 2
-    return t
+    const item: TextItem = { ...newText({ x: 0, y }, text, size), bold, align: 'center' }
+    item.x = cx - measureText(item).w / 2
+    return item
   }
   const arrow = (x1: number, y1: number, x2: number, y2: number): ArrowItem => ({
     ...newArrow({ x: x1, y: y1 }),
@@ -128,7 +130,7 @@ export function exampleDoc(): Doc {
   })
 
   const items: (Item | null)[] = [
-    { ...newText({ x: 70, y: 56 }, 'From first contact to antibody response', 32), bold: true },
+    { ...newText({ x: 70, y: 56 }, t('From first contact to antibody response'), 32), bold: true },
     place('microbiology-bacteria-swimming', 125, 390, 150),
     place('blood-immunology-macrophage', 365, 390, 160),
     place('blood-immunology-t-lymphocyte', 615, 390, 130),
@@ -138,15 +140,15 @@ export function exampleDoc(): Doc {
     arrow(455, 390, 535, 390),
     arrow(690, 390, 775, 390),
     arrow(930, 390, 1005, 390),
-    label('Bacterium', 125, 500),
-    label('Macrophage', 365, 500),
-    label('T lymphocyte', 615, 500),
-    label('B lymphocyte', 855, 500),
-    label('Antibody', 1075, 500),
-    label('engulfs', 240, 335, 17),
-    label('presents\nantigen', 495, 318, 17),
-    label('activates', 732, 335, 17),
-    label('produces', 967, 335, 17),
+    label(t('Bacterium'), 125, 500),
+    label(t('Macrophage'), 365, 500),
+    label(t('T lymphocyte'), 615, 500),
+    label(t('B lymphocyte'), 855, 500),
+    label(t('Antibody'), 1075, 500),
+    label(t('engulfs'), 240, 335, 17),
+    label(t('presents\nantigen'), 495, 318, 17),
+    label(t('activates'), 732, 335, 17),
+    label(t('produces'), 967, 335, 17),
   ]
-  return { ...emptyDoc(), title: 'Example figure', items: items.filter((i): i is Item => i !== null) }
+  return { ...emptyDoc(), title: t('Example figure'), items: items.filter((i): i is Item => i !== null) }
 }

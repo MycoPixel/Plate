@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Glyph } from './Glyph'
+import { t, useLang } from './i18n'
 import { renderSmiles } from './structure'
 import type { StructureImage } from './structure'
 
@@ -22,6 +23,7 @@ export function StructureDialog({
   onAdd: (smiles: string, color: boolean, image: StructureImage) => void
 }) {
   const ref = useRef<HTMLDialogElement>(null)
+  const lang = useLang()
   const [smiles, setSmiles] = useState('CN1C=NC2=C1C(=O)N(C(=O)N2C)C')
   const [color, setColor] = useState(true)
   const [preview, setPreview] = useState<StructureImage | null>(null)
@@ -38,7 +40,7 @@ export function StructureDialog({
   useEffect(() => {
     if (!open) return
     let live = true
-    const t = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       renderSmiles(smiles, color).then(
         (img) => {
           if (!live) return
@@ -48,58 +50,57 @@ export function StructureDialog({
         (e: unknown) => {
           if (!live) return
           setPreview(null)
-          setError(e instanceof Error ? e.message : 'Could not draw that structure.')
+          setError(e instanceof Error ? e.message : t('Could not draw that structure.'))
         },
       )
     }, 250)
     return () => {
       live = false
-      window.clearTimeout(t)
+      window.clearTimeout(timer)
     }
-  }, [smiles, color, open])
+  }, [smiles, color, open, lang])
 
   return (
     <dialog ref={ref} className="dialog" onClose={onClose} onClick={(e) => e.target === ref.current && onClose()}>
       <div className="dialog-body">
         <header className="dialog-head">
-          <h2>Chemical structure</h2>
-          <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
+          <h2>{t('Chemical structure')}</h2>
+          <button type="button" className="icon-btn" aria-label={t('Close')} onClick={onClose}>
             <Glyph name="close" />
           </button>
         </header>
         <p className="note">
-          Paste a SMILES string and Plate draws the skeletal structure as an editable picture you can place,
-          resize and export with the rest of the figure.
+          {t('Paste a SMILES string and Plate draws the skeletal structure as an editable picture you can place, resize and export with the rest of the figure.')}
         </p>
         <label className="field wide">
-          <span>SMILES</span>
+          <span>{t('SMILES')}</span>
           <textarea
             rows={2}
             spellCheck={false}
             className="mono"
             value={smiles}
             onChange={(e) => setSmiles(e.target.value)}
-            aria-label="SMILES"
+            aria-label={t('SMILES')}
           />
         </label>
-        <div className="chips" role="group" aria-label="Examples">
+        <div className="chips" role="group" aria-label={t('Examples')}>
           {EXAMPLES.map(([name, s]) => (
             <button key={name} type="button" className="mini" onClick={() => setSmiles(s)}>
-              {name}
+              {t(name)}
             </button>
           ))}
         </div>
         <label className="check">
           <input type="checkbox" checked={color} onChange={(e) => setColor(e.target.checked)} />
-          <span>Colour the heteroatoms (N, O, S, halogens)</span>
+          <span>{t('Colour the heteroatoms (N, O, S, halogens)')}</span>
         </label>
         <div className="structure-preview" aria-live="polite">
-          {preview && !error && <img src={preview.src} alt="Preview of the structure" />}
+          {preview && !error && <img src={preview.src} alt={t('Preview of the structure')} />}
           {error && <p className="note error">{error}</p>}
         </div>
         <div className="dialog-actions">
           <button type="button" className="btn" onClick={onClose}>
-            Cancel
+            {t('Cancel')}
           </button>
           <button
             type="button"
@@ -107,7 +108,7 @@ export function StructureDialog({
             disabled={!preview || !!error}
             onClick={() => preview && onAdd(smiles.trim(), color, preview)}
           >
-            Add to figure
+            {t('Add to figure')}
           </button>
         </div>
       </div>
