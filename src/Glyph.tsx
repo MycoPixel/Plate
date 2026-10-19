@@ -13,6 +13,17 @@ const PATHS = {
   arrow: <path d="M5 19L19 5M9 5h10v10" />,
   rect: <rect x="4" y="6" width="16" height="12" rx="1.5" />,
   ellipse: <ellipse cx="12" cy="12" rx="8.5" ry="6" />,
+  membrane: (
+    <>
+      <circle cx="5.5" cy="5.5" r="1.8" />
+      <circle cx="12" cy="5.5" r="1.8" />
+      <circle cx="18.5" cy="5.5" r="1.8" />
+      <path d="M5.5 7.5v4M12 7.5v4M18.5 7.5v4M5.5 16.5v-4M12 16.5v-4M18.5 16.5v-4" />
+      <circle cx="5.5" cy="18.5" r="1.8" />
+      <circle cx="12" cy="18.5" r="1.8" />
+      <circle cx="18.5" cy="18.5" r="1.8" />
+    </>
+  ),
   undo: (
     <>
       <path d="M9 14L4 9l5-5" />
@@ -188,6 +199,11 @@ const PATHS = {
     <>
       <circle cx="12" cy="12" r="8.5" />
       <path d="M14.5 9.5a3 3 0 100 5" />
+    </>
+  ),
+  swap: (
+    <>
+      <path d="M4 8h13l-3.5-3.5M20 16H7l3.5 3.5" />
     </>
   ),
 } satisfies Record<string, ReactNode>

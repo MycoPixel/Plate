@@ -1,5 +1,6 @@
 import { emptyDoc, uid } from './defaults'
-import type { Doc, Item } from './types'
+import { syncConnectors } from './connectors'
+import type { Anchor, Doc, Item } from './types'
 
 const KEY = 'plate:doc:v1'
 
@@ -64,6 +65,9 @@ function sanitizeItem(raw: unknown): Item | null {
         name: typeof raw.name === 'string' ? raw.name.slice(0, 120) : undefined,
         smiles: typeof raw.smiles === 'string' ? raw.smiles.slice(0, 2000) : undefined,
         smilesColor: typeof raw.smilesColor === 'boolean' ? raw.smilesColor : undefined,
+        author: typeof raw.author === 'string' && raw.author ? raw.author.slice(0, 200) : undefined,
+        license: typeof raw.license === 'string' && raw.license ? raw.license.slice(0, 120) : undefined,
+        source: typeof raw.source === 'string' && raw.source ? raw.source.slice(0, 500) : undefined,
       }
     }
     case 'shape':
@@ -93,7 +97,32 @@ function sanitizeItem(raw: unknown): Item | null {
         bold: bool(raw.bold, false),
         italic: bool(raw.italic, false),
         align: oneOf(raw.align, ['left', 'center', 'right'] as const, 'left'),
+        font: oneOf(raw.font, ['sans', 'serif', 'mono'] as const, 'sans'),
       }
+    case 'membrane': {
+      const iconId = str(raw.iconId, '')
+      if (!iconId) return null
+      return {
+        ...flags,
+        type: 'membrane',
+        id,
+        x1: num(raw.x1, 0),
+        y1: num(raw.y1, 0),
+        x2: num(raw.x2, 0),
+        y2: num(raw.y2, 0),
+        bend: Math.min(1.5, Math.max(-1.5, num(raw.bend, 0))),
+        iconId,
+        size: Math.min(400, Math.max(2, num(raw.size, 22))),
+        layers: raw.layers === 1 ? 1 : 2,
+        gap: Math.min(300, Math.max(0, num(raw.gap, 3))),
+        spacing: Math.min(3, Math.max(0.3, num(raw.spacing, 1.05))),
+        jitter: Math.min(1, Math.max(0, num(raw.jitter, 0.2))),
+        seed: Math.floor(Math.abs(num(raw.seed, 1))) % 1_000_000_000,
+        opacity: Math.min(1, Math.max(0, num(raw.opacity, 1))),
+        flip: bool(raw.flip, false),
+        colors: colorMap(raw.colors),
+      }
+    }
     case 'arrow':
       return {
         ...flags,
@@ -110,24 +139,32 @@ function sanitizeItem(raw: unknown): Item | null {
         kind: oneOf(raw.kind, ['straight', 'elbow', 'curve'] as const, 'straight'),
         bend: Math.min(1.5, Math.max(-1.5, num(raw.bend, 0.5))),
         axis: oneOf(raw.axis, ['h', 'v'] as const, 'h'),
+        from: anchorOf(raw.from),
+        to: anchorOf(raw.to),
       }
     default:
       return null
   }
 }
 
+function anchorOf(v: unknown): Anchor | undefined {
+  if (!isObj(v) || typeof v.id !== 'string' || !v.id) return undefined
+  const side = v.side === 'n' || v.side === 'e' || v.side === 's' || v.side === 'w' ? v.side : undefined
+  return side ? { id: v.id, side } : { id: v.id }
+}
+
 export function sanitizeDoc(raw: unknown): Doc | null {
   if (!isObj(raw) || !Array.isArray(raw.items)) return null
   const base = emptyDoc()
   const items = raw.items.map(sanitizeItem).filter((i): i is Item => i !== null)
-  return {
+  return syncConnectors({
     title: str(raw.title, base.title).slice(0, 120),
     width: Math.min(8000, Math.max(100, num(raw.width, base.width))),
     height: Math.min(8000, Math.max(100, num(raw.height, base.height))),
     background: str(raw.background, base.background),
     transparent: bool(raw.transparent, false),
     items,
-  }
+  })
 }
 
 export const serializeProject = (doc: Doc) =>

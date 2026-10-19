@@ -5,8 +5,9 @@ import {
   bendFromPoint,
   boxOf,
   centerOf,
-  FIGURE_FONT,
+  fontFamily,
   iconLayout,
+  lineSpans,
   measureText,
   rectsIntersect,
   resizeItem,
@@ -17,10 +18,12 @@ import {
 } from './geometry'
 import { expandGroups } from './groups'
 import { getIcon, ICON_BY_ID, iconDataUri, resolveColors, scopeIds, useIconCacheVersion } from './icons'
-import { newArrow, newShape } from './defaults'
+import { detachOutside, targetAt } from './connectors'
+import { newArrow, newMembrane, newShape } from './defaults'
+import { lipidTransform, membraneLayout } from './membrane'
 import { t, useLang } from './i18n'
-import { ICON_MIME } from './Palette'
-import type { ArrowItem, Doc, Handle, IconItem, ImageItem, Item, Pt, Rect, ShapeItem, TextItem, Tool } from './types'
+import { ICON_MIME } from './iconFilter'
+import type { ArrowItem, Doc, Handle, IconItem, ImageItem, Item, MembraneItem, Pt, Rect, ShapeItem, TextItem, Tool } from './types'
 import { clamp, isFormTarget } from './util'
 
 type Drag =
@@ -29,11 +32,15 @@ type Drag =
   | { kind: 'rotate'; origin: IconItem | ImageItem | ShapeItem | TextItem; center: Pt; startAngle: number; moved: boolean }
   | { kind: 'arrowEnd'; which: 1 | 2; origin: ArrowItem; moved: boolean }
   | { kind: 'arrowBend'; origin: ArrowItem; moved: boolean }
-  | { kind: 'create'; tool: 'arrow' | 'rect' | 'ellipse'; start: Pt; id: string | null }
+  | { kind: 'create'; tool: 'arrow' | 'rect' | 'ellipse' | 'membrane'; start: Pt; id: string | null; from: string | null }
+  | { kind: 'lineEnd'; which: 1 | 2; origin: MembraneItem; moved: boolean }
+  | { kind: 'lineBend'; origin: MembraneItem; moved: boolean }
   | { kind: 'marquee'; start: Pt; base: string[]; moved: boolean }
   | { kind: 'pan'; sx: number; sy: number; left: number; top: number }
 
 const GRID = 8
+/** How close, in screen pixels, a pointer has to be to an item for an arrow end to attach to it. */
+const ATTACH_PX = 6
 const CURSORS: Record<Handle, string> = {
   nw: 'nwse-resize',
   se: 'nwse-resize',
@@ -114,6 +121,49 @@ const IconView = memo(function IconView({ item, v }: { item: IconItem; v: number
   )
 })
 
+/** A membrane: the lipid is drawn once in a <defs>, and every lipid along the line is a <use> of it. */
+const MembraneView = memo(function MembraneView({ item, zoom }: { item: MembraneItem; zoom: number; v: number }) {
+  const meta = ICON_BY_ID.get(item.iconId)
+  const parsed = getIcon(item.iconId)
+  const layout = membraneLayout(item)
+  const lid = `lipid-${item.id}`
+  const ready = parsed?.status === 'ready' ? parsed : null
+  const html = ready?.inline ? scopeIds(resolveColors(ready.inner, ready.palette, item.colors), item.id) : ''
+  const uri = ready && !ready.inline ? iconDataUri(item.iconId, ready, item.colors) : ''
+  const vb = meta?.viewBox
+  return (
+    <g data-id={item.id} data-locked={item.locked || undefined} opacity={item.opacity < 1 ? item.opacity : undefined}>
+      <path
+        d={layout.d}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={Math.max(layout.thickness, 14 / zoom)}
+        strokeLinecap="round"
+        pointerEvents="stroke"
+      />
+      {ready && vb && (
+        <g pointerEvents="none">
+          <defs>
+            {ready.inline ? (
+              <g id={lid} transform={`scale(${1 / vb[2]} ${1 / vb[3]}) translate(${-vb[0]} ${-vb[1]})`} clipPath={`url(#clip-${lid})`}>
+                <clipPath id={`clip-${lid}`}>
+                  <rect x={vb[0]} y={vb[1]} width={vb[2]} height={vb[3]} />
+                </clipPath>
+                <g dangerouslySetInnerHTML={{ __html: html }} />
+              </g>
+            ) : (
+              <image id={lid} x={0} y={0} width={1} height={1} preserveAspectRatio="none" href={uri} />
+            )}
+          </defs>
+          {layout.lipids.map((l, i) => (
+            <use key={i} href={`#${lid}`} transform={lipidTransform(l)} />
+          ))}
+        </g>
+      )}
+    </g>
+  )
+})
+
 const ItemView = memo(function ItemView({ item, zoom, v }: { item: Item; zoom: number; v: number }) {
   switch (item.type) {
     case 'icon':
@@ -169,7 +219,7 @@ const ItemView = memo(function ItemView({ item, zoom, v }: { item: Item; zoom: n
         <g data-id={item.id} transform={transformAttr(b)} data-locked={item.locked || undefined}>
           <rect x={item.x} y={item.y} width={m.w} height={m.h} fill="transparent" />
           <text
-            fontFamily={FIGURE_FONT}
+            fontFamily={fontFamily(item.font)}
             fontSize={item.fontSize}
             fontWeight={item.bold ? 700 : undefined}
             fontStyle={item.italic ? 'italic' : undefined}
@@ -178,15 +228,19 @@ const ItemView = memo(function ItemView({ item, zoom, v }: { item: Item; zoom: n
             pointerEvents="none"
             style={{ whiteSpace: 'pre' }}
           >
-            {m.lines.map((line, i) => (
-              <tspan key={i} x={ax} y={item.y + i * lh + item.fontSize * 0.95}>
-                {line || ' '}
-              </tspan>
-            ))}
+            {m.lines.flatMap((line, i) =>
+              lineSpans(line, ax, item.y + i * lh + item.fontSize * 0.95, item.fontSize).map((sp, j) => (
+                <tspan key={`${i}:${j}`} x={sp.x} y={sp.y} dy={sp.dy} fontSize={sp.size}>
+                  {sp.text}
+                </tspan>
+              )),
+            )}
           </text>
         </g>
       )
     }
+    case 'membrane':
+      return <MembraneView item={item} zoom={zoom} v={v} />
     case 'arrow': {
       const { d, hit, heads } = arrowParts(item)
       return (
@@ -217,6 +271,31 @@ const ItemView = memo(function ItemView({ item, zoom, v }: { item: Item; zoom: n
   }
 })
 
+/** Outline around the item an arrow end would attach to. */
+function ConnectHighlight({ item, zoom }: { item: Item; zoom: number }) {
+  if (item.type === 'arrow' || item.type === 'membrane') return null
+  const b = boxOf(item)
+  const c = centerOf(b)
+  const pad = 3 / zoom
+  return (
+    <g transform={`translate(${c.x} ${c.y}) rotate(${b.rotation})`} pointerEvents="none">
+      {item.type === 'shape' && item.shape === 'ellipse' ? (
+        <ellipse className="connect-target" rx={b.w / 2 + pad} ry={b.h / 2 + pad} vectorEffect="non-scaling-stroke" />
+      ) : (
+        <rect
+          className="connect-target"
+          x={-b.w / 2 - pad}
+          y={-b.h / 2 - pad}
+          width={b.w + 2 * pad}
+          height={b.h + 2 * pad}
+          rx={3 / zoom}
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
+    </g>
+  )
+}
+
 function Overlay({ items, zoom }: { items: Item[]; zoom: number }) {
   if (items.length === 0) return null
   const hs = 9 / zoom
@@ -241,6 +320,37 @@ function Overlay({ items, zoom }: { items: Item[]; zoom: number }) {
               style={{ cursor: 'move' }}
             />
           )}
+          {([1, 2] as const).map((w) => (
+            <circle
+              key={w}
+              className={(w === 1 ? it.from : it.to) ? 'handle handle-attached' : 'handle'}
+              data-handle={`a${w}`}
+              cx={w === 1 ? it.x1 : it.x2}
+              cy={w === 1 ? it.y1 : it.y2}
+              r={hs * 0.62}
+              vectorEffect="non-scaling-stroke"
+              style={{ cursor: 'move' }}
+            />
+          ))}
+        </g>
+      )
+    }
+    if (it.type === 'membrane') {
+      const { d, peak } = membraneLayout(it)
+      return (
+        <g>
+          <path className="sel-line" d={d} fill="none" vectorEffect="non-scaling-stroke" pointerEvents="none" />
+          <rect
+            className="handle"
+            data-handle="bend"
+            x={peak.x - hs / 2}
+            y={peak.y - hs / 2}
+            width={hs}
+            height={hs}
+            transform={`rotate(45 ${peak.x} ${peak.y})`}
+            vectorEffect="non-scaling-stroke"
+            style={{ cursor: 'move' }}
+          />
           {([1, 2] as const).map((w) => (
             <circle
               key={w}
@@ -351,6 +461,8 @@ export function Canvas(props: CanvasProps) {
   const drag = useRef<Drag | null>(null)
   const [marquee, setMarquee] = useState<Rect | null>(null)
   const [spaceDown, setSpaceDown] = useState(false)
+  /** The item an arrow end would attach to right now (highlighted while drawing or dragging an end). */
+  const [connectTo, setConnectTo] = useState<string | null>(null)
   const zoomRef = useRef(zoom)
   const setZoomRef = useRef(props.setZoom)
   const anchor = useRef<{ bx: number; by: number; cx: number; cy: number } | null>(null)
@@ -361,6 +473,10 @@ export function Canvas(props: CanvasProps) {
   })
 
   const selected = useMemo(() => doc.items.filter((i) => selection.includes(i.id)), [doc.items, selection])
+
+  useEffect(() => {
+    if (tool !== 'arrow') setConnectTo(null)
+  }, [tool])
 
   const toBoard = useCallback((e: { clientX: number; clientY: number }): Pt => {
     const m = svgRef.current?.getScreenCTM()
@@ -462,14 +578,15 @@ export function Canvas(props: CanvasProps) {
       return
     }
     if (tool !== 'select') {
-      drag.current = { kind: 'create', tool, start: snapP(p), id: null }
+      const from = tool === 'arrow' && !e.altKey ? targetAt(doc, p, ATTACH_PX / zoom) : null
+      drag.current = { kind: 'create', tool, start: snapP(p), id: null, from: from?.id ?? null }
       return
     }
 
     const handle = target.closest('[data-handle]')?.getAttribute('data-handle')
     const only = selected.length === 1 ? selected[0] : null
     if (handle && only) {
-      if (handle === 'rotate' && only.type !== 'arrow') {
+      if (handle === 'rotate' && only.type !== 'arrow' && only.type !== 'membrane') {
         const c = centerOf(boxOf(only))
         drag.current = {
           kind: 'rotate',
@@ -488,7 +605,15 @@ export function Canvas(props: CanvasProps) {
         drag.current = { kind: 'arrowBend', origin: only, moved: false }
         return
       }
-      if (only.type !== 'arrow' && handle in CURSORS) {
+      if ((handle === 'a1' || handle === 'a2') && only.type === 'membrane') {
+        drag.current = { kind: 'lineEnd', which: handle === 'a1' ? 1 : 2, origin: only, moved: false }
+        return
+      }
+      if (handle === 'bend' && only.type === 'membrane') {
+        drag.current = { kind: 'lineBend', origin: only, moved: false }
+        return
+      }
+      if (only.type !== 'arrow' && only.type !== 'membrane' && handle in CURSORS) {
         drag.current = { kind: 'resize', handle: handle as Handle, origin: only, moved: false }
         return
       }
@@ -533,7 +658,12 @@ export function Canvas(props: CanvasProps) {
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const d = drag.current
-    if (!d) return
+    if (!d) {
+      // With the arrow tool, show which item a press would start the arrow on.
+      const hit = tool === 'arrow' && !e.altKey ? targetAt(doc, toBoard(e), ATTACH_PX / zoom) : null
+      setConnectTo((prev) => (prev === (hit?.id ?? null) ? prev : (hit?.id ?? null)))
+      return
+    }
     if (d.kind === 'pan') {
       const stage = stageRef.current
       if (stage) {
@@ -558,12 +688,16 @@ export function Canvas(props: CanvasProps) {
           dx = snapV(o.x + dx) - o.x
           dy = snapV(o.y + dy) - o.y
         }
+        const moving = new Set(d.origin.keys())
         setDoc(
           (doc0) => ({
             ...doc0,
             items: doc0.items.map((it) => {
               const o = d.origin.get(it.id)
-              return o ? translateItem(o, dx, dy) : it
+              if (!o) return it
+              const moved = translateItem(o, dx, dy)
+              // An arrow dragged without the items it is attached to comes loose from them.
+              return moved.type === 'arrow' ? detachOutside(moved, moving) : moved
             }),
           }),
           false,
@@ -598,10 +732,40 @@ export function Canvas(props: CanvasProps) {
           checkpoint()
         }
         const other = d.which === 1 ? { x: d.origin.x2, y: d.origin.y2 } : { x: d.origin.x1, y: d.origin.y1 }
+        const otherId = d.which === 1 ? d.origin.to?.id : d.origin.from?.id
+        // Over an item the end attaches to it (hold Alt to leave it free); anywhere else it comes loose.
+        const hit = e.altKey ? null : targetAt(doc, p, ATTACH_PX / zoom, otherId)
+        setConnectTo(hit?.id ?? null)
+        const q = hit ? p : e.shiftKey ? snapAngle(other, p) : snapP(p)
+        const was = d.which === 1 ? d.origin.from : d.origin.to
+        const anchor = hit ? (was?.id === hit.id ? was : { id: hit.id }) : undefined
+        patch(d.origin.id, (it) => {
+          if (it.type !== 'arrow') return it
+          return d.which === 1 ? { ...it, x1: q.x, y1: q.y, from: anchor } : { ...it, x2: q.x, y2: q.y, to: anchor }
+        })
+        break
+      }
+      case 'lineEnd': {
+        if (!d.moved) {
+          d.moved = true
+          checkpoint()
+        }
+        const other = d.which === 1 ? { x: d.origin.x2, y: d.origin.y2 } : { x: d.origin.x1, y: d.origin.y1 }
         const q = e.shiftKey ? snapAngle(other, p) : snapP(p)
-        patch(d.origin.id, (it) =>
-          it.type !== 'arrow' ? it : d.which === 1 ? { ...it, x1: q.x, y1: q.y } : { ...it, x2: q.x, y2: q.y },
-        )
+        patch(d.origin.id, (it) => {
+          if (it.type !== 'membrane') return it
+          return d.which === 1 ? { ...it, x1: q.x, y1: q.y } : { ...it, x2: q.x, y2: q.y }
+        })
+        break
+      }
+      case 'lineBend': {
+        if (!d.moved) {
+          d.moved = true
+          checkpoint()
+        }
+        const curve = { ...d.origin, kind: 'curve' as const, axis: 'h' as const }
+        const bend = Math.round(bendFromPoint(curve, snap ? snapP(p) : p) * 100) / 100
+        patch(d.origin.id, (it) => (it.type === 'membrane' ? { ...it, bend } : it))
         break
       }
       case 'arrowBend': {
@@ -617,15 +781,26 @@ export function Canvas(props: CanvasProps) {
         if (!d.id) {
           if (Math.hypot(p.x - d.start.x, p.y - d.start.y) * zoom < 4) return
           checkpoint()
-          const made = d.tool === 'arrow' ? newArrow(d.start) : newShape(d.tool, d.start)
+          const made =
+            d.tool === 'arrow'
+              ? { ...newArrow(d.start), from: d.from ? { id: d.from } : undefined }
+              : d.tool === 'membrane'
+                ? newMembrane(d.start)
+                : newShape(d.tool, d.start)
           d.id = made.id
           setDoc((doc0) => ({ ...doc0, items: [...doc0.items, made] }), false)
           setSelection([made.id])
         }
         const id = d.id
         const q = snapP(p)
+        const hit = d.tool === 'arrow' && !e.altKey ? targetAt(doc, p, ATTACH_PX / zoom, d.from ?? undefined) : null
+        setConnectTo(hit?.id ?? null)
         patch(id, (it) => {
           if (it.type === 'arrow') {
+            const end = hit ? p : e.shiftKey ? snapAngle(d.start, p) : q
+            return { ...it, x2: end.x, y2: end.y, to: hit ? { id: hit.id } : undefined }
+          }
+          if (it.type === 'membrane') {
             const end = e.shiftKey ? snapAngle(d.start, p) : q
             return { ...it, x2: end.x, y2: end.y }
           }
@@ -667,6 +842,7 @@ export function Canvas(props: CanvasProps) {
     if (stage?.hasPointerCapture(e.pointerId)) stage.releasePointerCapture(e.pointerId)
     if (!d) return
     if (d.kind === 'marquee') setMarquee(null)
+    setConnectTo(null)
     if (d.kind === 'move' && !d.moved && !d.shift && selection.length > 1) setSelection(expandGroups(doc.items, [d.primary]))
     if (d.kind === 'create' && d.id) props.onToolDone()
   }
@@ -735,6 +911,10 @@ export function Canvas(props: CanvasProps) {
               {doc.items.map((it) => (it.hidden ? null : <ItemView key={it.id} item={it} zoom={zoom} v={iconsV} />))}
             </g>
             <Overlay items={selected} zoom={zoom} />
+            {connectTo && (() => {
+              const target = doc.items.find((i) => i.id === connectTo)
+              return target ? <ConnectHighlight item={target} zoom={zoom} /> : null
+            })()}
             {marquee && (
               <rect className="marquee" x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h} vectorEffect="non-scaling-stroke" pointerEvents="none" />
             )}

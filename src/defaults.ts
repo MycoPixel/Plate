@@ -1,7 +1,8 @@
 import { measureText } from './geometry'
 import { t } from './i18n'
 import { ICON_BY_ID } from './icons'
-import type { ArrowItem, Doc, IconItem, IconMeta, ImageItem, Item, Pt, ShapeItem, TextItem } from './types'
+import { DEFAULT_LIPID } from './membrane'
+import type { ArrowItem, Doc, IconItem, IconMeta, ImageItem, Item, MembraneItem, Pt, ShapeItem, TextItem } from './types'
 
 export const uid = () => Math.random().toString(36).slice(2, 9)
 
@@ -88,6 +89,25 @@ export const newArrow = (at: Pt): ArrowItem => ({
   kind: 'straight',
   bend: 0.5,
   axis: 'h',
+})
+
+export const newMembrane = (at: Pt): MembraneItem => ({
+  type: 'membrane',
+  id: uid(),
+  x1: at.x,
+  y1: at.y,
+  x2: at.x,
+  y2: at.y,
+  bend: 0,
+  iconId: DEFAULT_LIPID,
+  size: 22,
+  layers: 2,
+  gap: 3,
+  spacing: 1.05,
+  jitter: 0.2,
+  seed: Math.floor(Math.random() * 1_000_000_000),
+  opacity: 1,
+  flip: false,
 })
 
 /** Starting bend value that looks right for each arrow kind. */

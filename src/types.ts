@@ -24,6 +24,8 @@ export type IconMeta = {
   tags?: string[]
 }
 
+export type FontId = 'sans' | 'serif' | 'mono'
+
 type Flags = { hidden?: boolean; locked?: boolean; group?: string }
 type Box = { x: number; y: number; w: number; h: number; rotation: number }
 
@@ -50,6 +52,10 @@ export type ImageItem = Flags &
     smiles?: string
     /** Structure drawings only: colour the heteroatoms. */
     smilesColor?: boolean
+    /** Credit for a picture the user brought: what ends up in the credit line. */
+    author?: string
+    license?: string
+    source?: string
   }
 
 export type ShapeItem = Flags &
@@ -76,7 +82,12 @@ export type TextItem = Flags & {
   bold: boolean
   italic: boolean
   align: 'left' | 'center' | 'right'
+  /** Missing means sans-serif (Arial), so older figures keep working. */
+  font?: FontId
 }
+
+/** Where one end of an arrow is attached: an item on the board, and optionally a fixed side of it. */
+export type Anchor = { id: string; side?: 'n' | 'e' | 's' | 'w' }
 
 export type ArrowItem = Flags & {
   type: 'arrow'
@@ -94,9 +105,46 @@ export type ArrowItem = Flags & {
   bend: number
   /** Elbow only: which direction the arrow leaves its start in. */
   axis: 'h' | 'v'
+  /**
+   * Attached ends. The end then follows the item (x1/y1 or x2/y2 are kept up to date with it, so
+   * everything that only reads coordinates, such as export, keeps working). No side means automatic.
+   */
+  from?: Anchor
+  to?: Anchor
 }
 
-export type Item = IconItem | ImageItem | ShapeItem | TextItem | ArrowItem
+/**
+ * A membrane: one library icon (a lipid) repeated along a straight or curved line, as a bilayer or a
+ * single layer. The lipids are worked out from these settings, so the membrane stays editable.
+ */
+export type MembraneItem = Flags & {
+  type: 'membrane'
+  id: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  /** Sideways bulge as a fraction of the length, as for a curved arrow. 0 is a straight line. */
+  bend: number
+  iconId: string
+  /** Width of one lipid, along the membrane. Its height follows the icon's proportions. */
+  size: number
+  layers: 1 | 2
+  /** Bilayer: room left between the tails of the two layers. */
+  gap: number
+  /** Distance between lipids as a multiple of their width. */
+  spacing: number
+  /** 0 to 1: how much each lipid's position, angle and size varies. */
+  jitter: number
+  /** Seed of that variation, so the membrane looks the same every time it is drawn. */
+  seed: number
+  opacity: number
+  /** Single layer: put the heads on the other side. */
+  flip: boolean
+  colors?: Record<string, string>
+}
+
+export type Item = IconItem | ImageItem | ShapeItem | TextItem | ArrowItem | MembraneItem
 
 export type Doc = {
   title: string
@@ -107,6 +155,6 @@ export type Doc = {
   items: Item[]
 }
 
-export type Tool = 'select' | 'text' | 'arrow' | 'rect' | 'ellipse'
+export type Tool = 'select' | 'text' | 'arrow' | 'rect' | 'ellipse' | 'membrane'
 export type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 export type Rect = { x: number; y: number; w: number; h: number }

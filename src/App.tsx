@@ -1,20 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from './Canvas'
-import { usedIcons } from './credits'
+import { creditedImages, usedIcons } from './credits'
 import { CreditsDialog } from './CreditsDialog'
 import { emptyDoc, exampleDoc, INK, newIcon, newImage, newShape, newText, uid } from './defaults'
-import { buildSvg, download, fileSlug, renderPng } from './export'
+import { canPaste, copyItems, pasteCopies, setClipboardVerified } from './clipboard'
+import { remapAnchors, syncConnectors } from './connectors'
+import { buildSvg, copyPng, download, exportLayout, fileSlug, printPdf, renderPng } from './export'
+import { ExportDialog } from './ExportDialog'
+import type { ExportRequest } from './ExportDialog'
 import { aabbOf, measureText, scaleItem, translateItem, unionAabb } from './geometry'
 import { Glyph } from './Glyph'
 import type { GlyphName } from './Glyph'
 import { useHistory } from './history'
-import { ensureIcons, ICON_BY_ID } from './icons'
+import { ensureIcons, ICON_BY_ID, iconIdOf } from './icons'
 import { getLang, LANGS, setLang, t, useLang } from './i18n'
 import { importImageFile } from './images'
+import { pushRecent } from './library'
 import { Inspector } from './Inspector'
 import type { Align, Order } from './Inspector'
 import { Menu, MenuItem } from './Menu'
 import { Palette } from './Palette'
+import { ReplaceIconDialog } from './ReplaceIconDialog'
 import { renderSmiles } from './structure'
 import type { StructureImage } from './structure'
 import { StructureDialog } from './StructureDialog'
@@ -46,6 +52,7 @@ const TOOLS: { id: Tool; icon: GlyphName; label: string; key: string }[] = [
   { id: 'arrow', icon: 'arrow', label: 'Arrow', key: 'A' },
   { id: 'rect', icon: 'rect', label: 'Rectangle', key: 'R' },
   { id: 'ellipse', icon: 'ellipse', label: 'Ellipse', key: 'E' },
+  { id: 'membrane', icon: 'membrane', label: 'Membrane', key: 'M' },
 ]
 
 const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
@@ -62,7 +69,12 @@ function Logo() {
 export default function App() {
   const lang = useLang()
   const initial = useMemo(() => loadAutosave() ?? emptyDoc(), [])
-  const { doc, set, checkpoint, undo, redo, canUndo, canRedo } = useHistory<Doc>(initial)
+  const { doc, set: setHistory, checkpoint, undo, redo, canUndo, canRedo } = useHistory<Doc>(initial)
+  // Every change goes through here, so arrows attached to items always follow them.
+  const set = useCallback(
+    (fn: (d: Doc) => Doc, record?: boolean, key?: string) => setHistory((d) => syncConnectors(fn(d)), record, key),
+    [setHistory],
+  )
   const [selection, setSelection] = useState<string[]>([])
   const [tool, setTool] = useState<Tool>('select')
   const [zoom, setZoom] = useState(1)
@@ -76,6 +88,8 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [focusTextTick, setFocusTextTick] = useState(0)
   const [structureOpen, setStructureOpen] = useState(false)
+  const [replaceOpen, setReplaceOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const imageRef = useRef<HTMLInputElement>(null)
   const saveWarned = useRef(false)
@@ -92,7 +106,7 @@ export default function App() {
 
   // Keep icon files loading for whatever is on the board, and autosave the figure.
   useEffect(() => {
-    void ensureIcons(doc.items.flatMap((i) => (i.type === 'icon' ? [i.iconId] : [])))
+    void ensureIcons(doc.items.flatMap((i) => iconIdOf(i) ?? []))
   }, [doc.items])
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -126,8 +140,27 @@ export default function App() {
       setSelection([item.id])
       setTool('select')
       setPanel(null)
+      pushRecent(iconId)
     },
     [doc.items.length, doc.width, doc.height, set],
+  )
+
+  const openReplace = useCallback(() => {
+    if (!selectedItems.some((i) => i.type === 'icon')) return
+    setReplaceOpen(true)
+  }, [selectedItems])
+
+  // Swap the drawing on every selected icon, leaving box, flip, opacity and colours alone.
+  const replaceIcon = useCallback(
+    (iconId: string) => {
+      const ids = selectedItems.filter((i) => i.type === 'icon').map((i) => i.id)
+      if (ids.length === 0) return
+      patchItems(ids, { iconId })
+      pushRecent(iconId)
+      setReplaceOpen(false)
+      say(t('Icon replaced. It kept its position, size and colours.'))
+    },
+    [selectedItems, patchItems, say],
   )
 
   const createText = useCallback(
@@ -145,14 +178,17 @@ export default function App() {
   const duplicate = useCallback(() => {
     if (!selectedItems.length) return
     const groups = new Map<string, string>() // copies of a group form a new group of their own
-    const clones = selectedItems.map((it) => {
+    const ids = new Map<string, string>() // old id to the copy's id, so copied arrows follow the copied items
+    const moved = selectedItems.map((it) => {
       const c = { ...translateItem(it, 16, 16), id: uid() } as Item
+      ids.set(it.id, c.id)
       if (it.group) {
         if (!groups.has(it.group)) groups.set(it.group, uid())
         c.group = groups.get(it.group)
       }
       return c
     })
+    const clones = remapAnchors(moved, ids)
     set((d) => ({ ...d, items: [...d.items, ...clones] }))
     setSelection(clones.map((c) => c.id))
   }, [selectedItems, set])
@@ -162,6 +198,20 @@ export default function App() {
     set((d) => ({ ...d, items: d.items.filter((i) => !sel.includes(i.id)) }))
     setSelection([])
   }, [sel, set])
+
+  const copySel = useCallback(() => {
+    if (!selectedItems.length) return
+    const marker = copyItems(selectedItems)
+    // The marker goes on the system clipboard too, so a later paste can tell the items are still what was copied.
+    setClipboardVerified(true)
+    void (navigator.clipboard?.writeText(marker) ?? Promise.reject(new Error('no clipboard'))).catch(() => setClipboardVerified(false))
+    say(t('Copied. Paste with {key}V.', { key: MOD }))
+  }, [selectedItems, say])
+
+  const cutSel = useCallback(() => {
+    copySel()
+    remove()
+  }, [copySel, remove])
 
   const order = useCallback(
     (mode: Order) => {
@@ -312,7 +362,7 @@ export default function App() {
     [set, say],
   )
 
-  // Pasting a copied picture puts it on the board.
+  // Pasting puts a copied picture, or items copied inside Plate, on the board.
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       if (isTextEntry(e.target) || document.querySelector('dialog[open]')) return
@@ -320,11 +370,21 @@ export default function App() {
       if (files.length) {
         e.preventDefault()
         void importFiles(files)
+        return
+      }
+      if (canPaste(e.clipboardData?.getData('text/plain') ?? '')) {
+        const copies = pasteCopies()
+        if (copies.length) {
+          e.preventDefault()
+          set((d) => ({ ...d, items: [...d.items, ...copies] }))
+          setSelection(copies.map((c) => c.id))
+          setTool('select')
+        }
       }
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
-  }, [importFiles])
+  }, [importFiles, set])
 
   const toggleFlag = useCallback(
     (id: string, flag: 'hidden' | 'locked') =>
@@ -388,14 +448,59 @@ export default function App() {
       } else {
         download(await renderPng(doc, scale, withCredits), `${fileSlug(doc.title)}${scale > 1 ? `@${scale}x` : ''}.png`)
       }
-      const needsCredit = usedIcons(doc).some((m) => !m.license.startsWith('CC0'))
-      say(
-        needsCredit && !withCredits
-          ? t('Exported. Some icons need credit, so add the credit line from the Credits button.')
-          : t('Exported.'),
-      )
+      exportToast()
     } catch (err) {
       say(t('Export failed. {msg}', { msg: err instanceof Error ? err.message : t('Try again.') }))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const exportToast = () => {
+    const needsCredit = usedIcons(doc).some((m) => !m.license.startsWith('CC0')) || creditedImages(doc).length > 0
+    say(
+      needsCredit && !withCredits
+        ? t('Exported. Some icons need credit, so add the credit line from the Credits button.')
+        : t('Exported.'),
+    )
+  }
+
+  const runDialogExport = async (req: ExportRequest) => {
+    setBusy(true)
+    try {
+      const opts = { onlyIds: req.onlyIds }
+      const base = `${fileSlug(doc.title)}${req.onlyIds ? '-selection' : ''}`
+      if (req.format === 'svg') {
+        const { svg } = await buildSvg(doc, withCredits, opts)
+        download(new Blob([svg], { type: 'image/svg+xml' }), `${base}.svg`)
+      } else if (req.format === 'png') {
+        const scale = ((req.widthMm / 25.4) * req.dpi) / exportLayout(doc, withCredits, opts).width
+        download(await renderPng(doc, scale, withCredits, { ...opts, dpi: req.dpi }), `${base}-${req.dpi}dpi.png`)
+      } else {
+        await printPdf(doc, withCredits, req.widthMm, opts)
+        say(t('The print window was opened. Choose “Save as PDF” to get the file.'))
+        setExportOpen(false)
+        return
+      }
+      setExportOpen(false)
+      exportToast()
+    } catch (err) {
+      say(t('Export failed. {msg}', { msg: err instanceof Error ? err.message : t('Try again.') }))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const quickPdf = () =>
+    void runDialogExport({ format: 'pdf', widthMm: Math.round(((doc.width * 25.4) / 96) * 10) / 10, dpi: 96 })
+
+  const copyImage = async () => {
+    setBusy(true)
+    try {
+      await copyPng(renderPng(doc, 2, withCredits, { onlyIds: sel.length ? sel : undefined }))
+      say(t('Image copied. Paste it into a slide or a document.'))
+    } catch {
+      say(t('Could not copy the image. Your browser may not allow it; use Export instead.'))
     } finally {
       setBusy(false)
     }
@@ -422,6 +527,12 @@ export default function App() {
             return run(redo)
           case 'd':
             return run(duplicate)
+          case 'c':
+            if (!sel.length) return
+            return run(copySel)
+          case 'x':
+            if (!sel.length) return
+            return run(cutSel)
           case 'g':
             return run(e.shiftKey ? ungroupSel : groupSel)
           case 'a':
@@ -482,7 +593,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', h)
   }, [])
 
-  const creditCount = usedIcons(doc).length
+  const creditCount = usedIcons(doc).length + creditedImages(doc).length
 
   return (
     <div className="app">
@@ -586,6 +697,15 @@ export default function App() {
           <MenuItem onClick={() => void runExport('png', 4)} disabled={busy}>
             {t('PNG, 4× (print)')}
           </MenuItem>
+          <MenuItem onClick={quickPdf} disabled={busy}>
+            {t('PDF, vector (print window)')}
+          </MenuItem>
+          <MenuItem onClick={() => void copyImage()} disabled={busy}>
+            {sel.length ? t('Copy selection as image') : t('Copy figure as image')}
+          </MenuItem>
+          <MenuItem onClick={() => setExportOpen(true)} disabled={busy}>
+            {t('More export options…')}
+          </MenuItem>
         </Menu>
 
         <div className="cluster panel-toggles" role="group" aria-label={t('Panels')}>
@@ -639,6 +759,7 @@ export default function App() {
             onUngroup={ungroupSel}
             onScale={scaleSel}
             onRedrawStructure={redrawStructure}
+            onReplaceIcon={openReplace}
           />
         </div>
       </div>
@@ -652,7 +773,24 @@ export default function App() {
         onCopied={(ok) => say(ok ? t('Credit line copied.') : t('Could not copy. Select the text and copy it by hand.'))}
       />
 
+      <ExportDialog
+        doc={doc}
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        selectionIds={sel}
+        withCredits={withCredits}
+        setWithCredits={setWithCredits}
+        busy={busy}
+        onRun={(req) => void runDialogExport(req)}
+      />
+
       <StructureDialog open={structureOpen} onClose={() => setStructureOpen(false)} onAdd={addStructure} />
+
+      <ReplaceIconDialog
+        open={replaceOpen}
+        onClose={() => setReplaceOpen(false)}
+        onPick={(meta) => void replaceIcon(meta.id)}
+      />
 
       <input
         ref={imageRef}

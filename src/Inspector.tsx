@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ARTBOARDS, defaultBend } from './defaults'
+import { FONTS } from './geometry'
 import { Glyph } from './Glyph'
 import type { GlyphName } from './Glyph'
 import { iconLabel, t, useLang } from './i18n'
-import { getIcon, ICON_BY_ID, iconUrl, useIconCacheVersion } from './icons'
-import type { Doc, ImageItem, Item } from './types'
+import { getIcon, ICON_BY_ID, ICONS, iconUrl, useIconCacheVersion } from './icons'
+import { membraneLayout } from './membrane'
+import type { Anchor, Doc, FontId, ImageItem, IconMeta, Item, MembraneItem } from './types'
 import { round2 } from './util'
 
 export type Align = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
@@ -27,6 +29,7 @@ type Props = {
   onUngroup: () => void
   onScale: (factor: number) => void
   onRedrawStructure: (id: string, smiles: string, color: boolean) => Promise<boolean>
+  onReplaceIcon: () => void
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -141,6 +144,8 @@ const nameOf = (it: Item) => {
       return it.text.split('\n')[0].slice(0, 28) || t('Text')
     case 'image':
       return it.smiles ? t('Structure') : (it.name ?? t('Image'))
+    case 'membrane':
+      return t('Membrane')
     case 'arrow':
       return it.kind === 'elbow' ? t('Elbow arrow') : it.kind === 'curve' ? t('Curved arrow') : t('Arrow')
     case 'shape':
@@ -159,7 +164,7 @@ function Layers({ doc, selected, onSelect, onToggle }: Pick<Props, 'doc' | 'sele
         <ul className="layers">
           {rows.map((it) => {
             const meta = it.type === 'icon' ? ICON_BY_ID.get(it.iconId) : undefined
-            const glyph: GlyphName = it.type === 'image' ? 'image' : it.type === 'text' ? 'text' : it.type === 'arrow' ? 'arrow' : it.type === 'shape' ? (it.shape === 'rect' ? 'rect' : 'ellipse') : 'file'
+            const glyph: GlyphName = it.type === 'image' ? 'image' : it.type === 'text' ? 'text' : it.type === 'arrow' ? 'arrow' : it.type === 'membrane' ? 'membrane' : it.type === 'shape' ? (it.shape === 'rect' ? 'rect' : 'ellipse') : 'file'
             return (
               <li key={it.id} data-hidden={it.hidden || undefined}>
                 <button
@@ -194,6 +199,133 @@ function Layers({ doc, selected, onSelect, onToggle }: Pick<Props, 'doc' | 'sele
         </ul>
       )}
     </Section>
+  )
+}
+
+const LIPIDS = ICONS.filter((m) => m.category === 'Cell membrane' && /lipid/.test(m.id))
+
+/** Settings of a membrane: which lipid, how many layers, and how tightly and evenly they are packed. */
+function MembraneSection({
+  item,
+  meta,
+  onSet,
+}: {
+  item: MembraneItem
+  meta: IconMeta | undefined
+  onSet: (p: Record<string, unknown>, f: string) => void
+}) {
+  const options = LIPIDS.some((m) => m.id === item.iconId) || !meta ? LIPIDS : [meta, ...LIPIDS]
+  const count = membraneLayout(item).lipids.length
+  const pct = (label: string, value: number, min: number, max: number, key: string, field: string, scale = 100) => (
+    <label className="field wide">
+      <span>{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={Math.round(value * scale)}
+        onChange={(e) => onSet({ [field]: Number(e.target.value) / scale }, key)}
+      />
+    </label>
+  )
+  return (
+    <Section title={t('Membrane')}>
+      <label className="field wide">
+        <span>{t('Lipid')}</span>
+        <select value={item.iconId} onChange={(e) => onSet({ iconId: e.target.value, colors: undefined }, 'lipid')}>
+          {options.map((m) => (
+            <option key={m.id} value={m.id}>
+              {iconLabel(m)} ({m.license})
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field wide">
+        <span>{t('Layers')}</span>
+        <select value={item.layers} onChange={(e) => onSet({ layers: Number(e.target.value) }, 'layers')}>
+          <option value={2}>{t('Bilayer')}</option>
+          <option value={1}>{t('Single layer')}</option>
+        </select>
+      </label>
+      <div className="grid2">
+        <Num label={t('Lipid width')} value={item.size} min={4} onChange={(n) => onSet({ size: Math.max(4, n) }, 'msize')} />
+        {item.layers === 2 && <Num label={t('Gap between layers')} value={item.gap} min={0} onChange={(n) => onSet({ gap: Math.max(0, n) }, 'mgap')} />}
+      </div>
+      {pct(t('Spacing'), item.spacing, 50, 200, 'mspacing', 'spacing')}
+      {pct(t('Irregularity'), item.jitter, 0, 100, 'mjitter', 'jitter')}
+      {pct(t('Curve'), item.bend, -150, 150, 'mbend', 'bend')}
+      {pct(t('Opacity'), item.opacity, 5, 100, 'mop', 'opacity')}
+      <div className="btn-row">
+        {item.layers === 1 && (
+          <IconBtn icon="flip" label={t('Heads on the other side')} pressed={item.flip} onClick={() => onSet({ flip: !item.flip }, 'mflip')} />
+        )}
+        <button type="button" className="mini" onClick={() => onSet({ seed: Math.floor(Math.random() * 1_000_000_000) }, 'mseed')}>
+          {t('Shuffle')}
+        </button>
+        <span className="note small">{t('{n} lipids', { n: count })}</span>
+      </div>
+      {meta && (
+        <p className="note small">
+          {t('By')}{' '}
+          {meta.authorUrl ? (
+            <a href={meta.authorUrl} target="_blank" rel="noreferrer">
+              {meta.author}
+            </a>
+          ) : (
+            meta.author
+          )}
+          ,{' '}
+          <a href={meta.licenseUrl} target="_blank" rel="noreferrer">
+            {meta.license}
+          </a>
+          {t('. Added to your credits automatically.')}
+          {item.colors ? t(' Recoloured icons are credited as adapted.') : ''}
+        </p>
+      )}
+      <p className="note small">{t('Drag the round handles to move the ends, and the diamond to bend it.')}</p>
+    </Section>
+  )
+}
+
+/** Where one end of an arrow is attached, and which side of the item it uses. */
+function EndConnection({
+  label,
+  anchor,
+  doc,
+  onChange,
+}: {
+  label: string
+  anchor?: Anchor
+  doc: Doc
+  onChange: (a: Anchor | undefined) => void
+}) {
+  const target = anchor ? doc.items.find((i) => i.id === anchor.id) : undefined
+  if (!anchor || !target) {
+    return (
+      <p className="note small conn-free">
+        <strong>{label}:</strong> {t('free')}
+      </p>
+    )
+  }
+  return (
+    <div className="conn-row">
+      <label className="field">
+        <span>{t('{end}: attached to {name}', { end: label, name: nameOf(target) })}</span>
+        <select
+          value={anchor.side ?? 'auto'}
+          onChange={(e) => onChange(e.target.value === 'auto' ? { id: anchor.id } : { id: anchor.id, side: e.target.value as NonNullable<Anchor['side']> })}
+        >
+          <option value="auto">{t('Automatic side')}</option>
+          <option value="n">{t('Top')}</option>
+          <option value="e">{t('Right')}</option>
+          <option value="s">{t('Bottom')}</option>
+          <option value="w">{t('Left')}</option>
+        </select>
+      </label>
+      <button type="button" className="mini" onClick={() => onChange(undefined)}>
+        {t('Detach')}
+      </button>
+    </div>
   )
 }
 
@@ -244,7 +376,7 @@ function StructureEditor({
 }
 
 export function Inspector(props: Props) {
-  const { doc, selected, patch, patchDoc } = props
+  const { doc, selected, patch, patchDoc, onReplaceIcon } = props
   const textRef = useRef<HTMLTextAreaElement>(null)
   useLang()
   useIconCacheVersion() // the colour list appears once the selected icon has loaded
@@ -263,6 +395,20 @@ export function Inspector(props: Props) {
   const ids = selected.map((s) => s.id)
   const key = (f: string) => `${ids.join(',')}:${f}`
   const set = (p: Record<string, unknown>, f: string) => patch(ids, p, key(f))
+
+  /** Wraps the selected text in _{ } (subscript) or ^{ } (superscript), or opens an empty pair at the caret. */
+  const wrapScript = (mark: '_' | '^') => {
+    const ta = textRef.current
+    if (!ta || !one || one.type !== 'text') return
+    const a = ta.selectionStart
+    const b = ta.selectionEnd
+    const chosen = one.text.slice(a, b)
+    set({ text: `${one.text.slice(0, a)}${mark}{${chosen}}${one.text.slice(b)}` }, 'text')
+    requestAnimationFrame(() => {
+      ta.focus()
+      ta.setSelectionRange(a + 2, a + 2 + chosen.length)
+    })
+  }
 
   const arrange = (
     <Section title={t('Arrange')}>
@@ -335,13 +481,14 @@ export function Inspector(props: Props) {
       </>
     )
   } else {
-    const meta = one.type === 'icon' ? ICON_BY_ID.get(one.iconId) : undefined
-    const loaded = one.type === 'icon' ? getIcon(one.iconId) : undefined
+    const iconId = one.type === 'icon' || one.type === 'membrane' ? one.iconId : undefined
+    const meta = iconId ? ICON_BY_ID.get(iconId) : undefined
+    const loaded = iconId ? getIcon(iconId) : undefined
     const palette = loaded?.status === 'ready' ? loaded.palette : []
     body = (
       <>
         <Section title={nameOf(one)}>
-          {one.type === 'arrow' ? (
+          {one.type === 'arrow' || one.type === 'membrane' ? (
             <div className="grid2">
               <Num label={t('Start X')} value={one.x1} onChange={(n) => set({ x1: n }, 'x1')} />
               <Num label={t('Start Y')} value={one.y1} onChange={(n) => set({ y1: n }, 'y1')} />
@@ -365,6 +512,10 @@ export function Inspector(props: Props) {
 
         {one.type === 'icon' && meta && (
           <Section title={t('Icon')}>
+            <button type="button" className="btn wide" onClick={onReplaceIcon}>
+              <Glyph name="swap" size={16} />
+              {t('Replace icon…')}
+            </button>
             <div className="btn-row">
               <IconBtn icon="flip" label={t('Flip horizontally')} pressed={one.flipX} onClick={() => set({ flipX: !one.flipX }, 'flip')} />
             </div>
@@ -401,7 +552,11 @@ export function Inspector(props: Props) {
           </Section>
         )}
 
-        {one.type === 'icon' && palette.length > 0 && (
+        {one.type === 'membrane' && (
+          <MembraneSection item={one} meta={meta} onSet={set} />
+        )}
+
+        {(one.type === 'icon' || one.type === 'membrane') && palette.length > 0 && (
           <Section title={t('Colours')}>
             <div className="swatches">
               {palette.slice(0, 12).map((orig) => (
@@ -446,7 +601,37 @@ export function Inspector(props: Props) {
             {one.smiles !== undefined ? (
               <StructureEditor key={one.id} item={one} onApply={(smiles, color) => props.onRedrawStructure(one.id, smiles, color)} />
             ) : (
-              <p className="note small">{t('Your own image. Its license is yours to check; it is not part of the icon credits.')}</p>
+              <>
+                <p className="note small">{t('Your own image. Fill in who made it and under what license, and it is added to the credit line. Its license is yours to check.')}</p>
+                <label className="field wide">
+                  <span>{t('Name')}</span>
+                  <input type="text" value={one.name ?? ''} maxLength={120} onChange={(e) => set({ name: e.target.value || undefined }, 'iname')} />
+                </label>
+                <label className="field wide">
+                  <span>{t('Author or source')}</span>
+                  <input type="text" value={one.author ?? ''} maxLength={200} onChange={(e) => set({ author: e.target.value || undefined }, 'iauthor')} />
+                </label>
+                <label className="field wide">
+                  <span>{t('License')}</span>
+                  <input
+                    type="text"
+                    list="image-licenses"
+                    placeholder={t('e.g. CC BY 4.0')}
+                    value={one.license ?? ''}
+                    maxLength={120}
+                    onChange={(e) => set({ license: e.target.value || undefined }, 'ilicense')}
+                  />
+                  <datalist id="image-licenses">
+                    {['CC0 1.0', 'CC BY 4.0', 'CC BY 3.0', 'Public Domain', 'Own work'].map((l) => (
+                      <option key={l} value={l} />
+                    ))}
+                  </datalist>
+                </label>
+                <label className="field wide">
+                  <span>{t('Link')}</span>
+                  <input type="text" inputMode="url" placeholder="https://" value={one.source ?? ''} maxLength={500} onChange={(e) => set({ source: e.target.value || undefined }, 'isource')} />
+                </label>
+              </>
             )}
           </Section>
         )}
@@ -485,6 +670,17 @@ export function Inspector(props: Props) {
                 onChange={(e) => set({ text: e.target.value }, 'text')}
               />
             </label>
+            <p className="note small script-hint">{t('Subscript and superscript: type H_{2}O or Ca^{2+}, or select text and use the x₂ and x² buttons.')}</p>
+            <label className="field wide">
+              <span>{t('Font')}</span>
+              <select value={one.font ?? 'sans'} onChange={(e) => set({ font: e.target.value as FontId }, 'font')}>
+                {(Object.keys(FONTS) as FontId[]).map((f) => (
+                  <option key={f} value={f}>
+                    {t(FONTS[f].label)}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="grid2">
               <Num label={t('Size')} value={one.fontSize} min={4} onChange={(n) => set({ fontSize: Math.max(4, n) }, 'fs')} />
               <Color label={t('Colour')} value={one.fill} onChange={(c) => set({ fill: c }, 'fill')} />
@@ -492,6 +688,12 @@ export function Inspector(props: Props) {
             <div className="btn-row">
               <IconBtn icon="bold" label={t('Bold')} pressed={one.bold} onClick={() => set({ bold: !one.bold }, 'b')} />
               <IconBtn icon="italic" label={t('Italic')} pressed={one.italic} onClick={() => set({ italic: !one.italic }, 'i')} />
+              <button type="button" className="icon-btn script-btn" title={t('Subscript')} aria-label={t('Subscript')} onClick={() => wrapScript('_')}>
+                x<sub>2</sub>
+              </button>
+              <button type="button" className="icon-btn script-btn" title={t('Superscript')} aria-label={t('Superscript')} onClick={() => wrapScript('^')}>
+                x<sup>2</sup>
+              </button>
               <span className="spacer" />
               <IconBtn icon="textLeft" label={t('Align text left')} pressed={one.align === 'left'} onClick={() => set({ align: 'left' }, 'al')} />
               <IconBtn icon="textCenter" label={t('Centre text')} pressed={one.align === 'center'} onClick={() => set({ align: 'center' }, 'al')} />
@@ -543,7 +745,7 @@ export function Inspector(props: Props) {
                 </label>
                 <label className="field wide">
                   <span>{t('Leaves the start')}</span>
-                  <select value={one.axis} onChange={(e) => set({ axis: e.target.value }, 'axis')}>
+                  <select value={one.axis} disabled={!!(one.from || one.to)} onChange={(e) => set({ axis: e.target.value }, 'axis')}>
                     <option value="h">{t('Sideways first')}</option>
                     <option value="v">{t('Up or down first')}</option>
                   </select>
@@ -565,6 +767,16 @@ export function Inspector(props: Props) {
             <div className="btn-row">
               <IconBtn icon="dashed" label={t('Dashed line')} pressed={one.dashed} onClick={() => set({ dashed: !one.dashed }, 'dash')} />
             </div>
+          </Section>
+        )}
+
+        {one.type === 'arrow' && (
+          <Section title={t('Connections')}>
+            <EndConnection label={t('Start')} anchor={one.from} doc={doc} onChange={(a) => set({ from: a }, 'from')} />
+            <EndConnection label={t('End')} anchor={one.to} doc={doc} onChange={(a) => set({ to: a }, 'to')} />
+            {!one.from && !one.to && (
+              <p className="note small">{t('Drag a round handle of the arrow onto an icon, shape or label to attach it, and the arrow follows when you move that item. Hold Alt to keep an end free.')}</p>
+            )}
           </Section>
         )}
 

@@ -1,4 +1,5 @@
-import type { ArrowItem, Handle, IconItem, ImageItem, Item, Pt, Rect, ShapeItem, TextItem } from './types'
+import { membraneBounds } from './membrane'
+import type { ArrowItem, FontId, Handle, IconItem, ImageItem, Item, Pt, Rect, ShapeItem, TextItem } from './types'
 
 /** Font used inside figures. Deliberately a system stack: exports must look the same everywhere. */
 export const FIGURE_FONT = 'Arial, Helvetica, sans-serif'
@@ -6,17 +7,71 @@ export const FIGURE_FONT = 'Arial, Helvetica, sans-serif'
 export const r3 = (n: number) => Math.round(n * 1000) / 1000
 const r6 = (n: number) => Math.round(n * 1e6) / 1e6
 
+export const FONTS: Record<FontId, { label: string; family: string }> = {
+  sans: { label: 'Sans-serif (Arial)', family: FIGURE_FONT },
+  serif: { label: 'Serif (Times)', family: '"Times New Roman", Times, serif' },
+  mono: { label: 'Monospace (Courier)', family: '"Courier New", Courier, monospace' },
+}
+export const fontFamily = (f?: FontId) => (f && FONTS[f] ? FONTS[f].family : FIGURE_FONT)
+
+/** Sub- and superscripts are typed as _{2} and ^{2+}. Size of the small text, relative to the line. */
+export const SCRIPT_SCALE = 0.7
+/** Run of text: shift 1 is a subscript, -1 a superscript. */
+export type Run = { text: string; shift: -1 | 0 | 1 }
+
+export function parseRich(line: string): Run[] {
+  const runs: Run[] = []
+  const re = /([_^])\{([^{}]*)\}/g
+  let last = 0
+  for (let m = re.exec(line); m; m = re.exec(line)) {
+    if (m.index > last) runs.push({ text: line.slice(last, m.index), shift: 0 })
+    if (m[2]) runs.push({ text: m[2], shift: m[1] === '_' ? 1 : -1 })
+    last = m.index + m[0].length
+  }
+  if (last < line.length) runs.push({ text: line.slice(last), shift: 0 })
+  return runs
+}
+
+export type Span = { text: string; x?: number; y?: number; dy?: number; size?: number }
+
+/**
+ * One line of text as <tspan>s. Only the first span has an absolute position; the others move with dy
+ * (not baseline-shift), which every SVG editor and browser understands.
+ */
+export function lineSpans(line: string, ax: number, y: number, fs: number): Span[] {
+  const runs = parseRich(line)
+  if (runs.length === 0) return [{ text: ' ', x: ax, y }]
+  let cur = 0
+  return runs.map((r, i) => {
+    const target = r.shift === 1 ? fs * 0.2 : r.shift === -1 ? -fs * 0.4 : 0
+    const span: Span = { text: r.text, size: r.shift ? fs * SCRIPT_SCALE : undefined }
+    if (i === 0) {
+      span.x = ax
+      span.y = y + target
+    } else if (target !== cur) {
+      span.dy = target - cur
+    }
+    cur = target
+    return span
+  })
+}
+
 let ctx: CanvasRenderingContext2D | null | undefined
 
-export function measureText(t: Pick<TextItem, 'text' | 'fontSize' | 'bold' | 'italic'>) {
+/** `plain` skips the _{ } and ^{ } markup, for text that is not figure text (the credit line). */
+export function measureText(t: Pick<TextItem, 'text' | 'fontSize' | 'bold' | 'italic'> & { font?: FontId }, plain = false) {
   const lines = t.text.split('\n')
   if (ctx === undefined) ctx = document.createElement('canvas').getContext('2d')
   let w = 0
-  if (ctx) {
-    ctx.font = `${t.italic ? 'italic ' : ''}${t.bold ? 700 : 400} ${t.fontSize}px ${FIGURE_FONT}`
-    for (const l of lines) w = Math.max(w, ctx.measureText(l || ' ').width)
-  } else {
-    for (const l of lines) w = Math.max(w, l.length * t.fontSize * 0.55)
+  const width = (text: string, size: number) => {
+    if (!ctx) return text.length * size * 0.55
+    ctx.font = `${t.italic ? 'italic ' : ''}${t.bold ? 700 : 400} ${size}px ${fontFamily(t.font)}`
+    return ctx.measureText(text).width
+  }
+  for (const l of lines) {
+    const runs: Run[] = plain ? [{ text: l || ' ', shift: 0 }] : parseRich(l)
+    if (runs.length === 0) runs.push({ text: ' ', shift: 0 })
+    w = Math.max(w, runs.reduce((sum, r) => sum + width(r.text, r.shift ? t.fontSize * SCRIPT_SCALE : t.fontSize), 0))
   }
   return { w: Math.max(w, 4), h: lines.length * t.fontSize * 1.2, lines }
 }
@@ -36,6 +91,8 @@ export function boxOf(item: Item): BoxGeom {
       const y = Math.min(...ys)
       return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y, rotation: 0 }
     }
+    case 'membrane':
+      return { ...membraneBounds(item), rotation: 0 }
     default:
       return { x: item.x, y: item.y, w: item.w, h: item.h, rotation: item.rotation }
   }
@@ -83,7 +140,7 @@ export const rectsIntersect = (a: Rect, b: Rect) =>
   a.x <= b.x + b.w && a.x + a.w >= b.x && a.y <= b.y + b.h && a.y + a.h >= b.y
 
 export function translateItem(item: Item, dx: number, dy: number): Item {
-  if (item.type === 'arrow') {
+  if (item.type === 'arrow' || item.type === 'membrane') {
     return { ...item, x1: item.x1 + dx, y1: item.y1 + dy, x2: item.x2 + dx, y2: item.y2 + dy }
   }
   return { ...item, x: item.x + dx, y: item.y + dy }
@@ -221,7 +278,7 @@ export function arrowParts(a: ArrowItem) {
 }
 
 /** Where a dragged bend handle should put the bend value. */
-export function bendFromPoint(a: ArrowItem, p: Pt): number {
+export function bendFromPoint(a: Pick<ArrowItem, 'x1' | 'y1' | 'x2' | 'y2' | 'kind' | 'bend' | 'axis'>, p: Pt): number {
   const dx = a.x2 - a.x1
   const dy = a.y2 - a.y1
   const len = Math.hypot(dx, dy)
@@ -241,6 +298,8 @@ export function scaleItem(item: Item, f: number, o: Pt): Item {
   switch (item.type) {
     case 'arrow':
       return { ...item, x1: sx(item.x1), y1: sy(item.y1), x2: sx(item.x2), y2: sy(item.y2) }
+    case 'membrane':
+      return { ...item, x1: sx(item.x1), y1: sy(item.y1), x2: sx(item.x2), y2: sy(item.y2), size: Math.max(2, item.size * f), gap: item.gap * f }
     case 'text':
       return { ...item, x: sx(item.x), y: sy(item.y), fontSize: Math.max(4, item.fontSize * f) }
     default:

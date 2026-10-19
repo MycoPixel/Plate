@@ -4,7 +4,7 @@ import rawBioart from './icons.bioart.json'
 import rawCommons from './icons.commons.json'
 import rawPhylopic from './icons.phylopic.json'
 import rawHealth from './icons.healthicons.json'
-import type { IconMeta } from './types'
+import type { IconMeta, Item } from './types'
 
 type LicenseKey = 'cc0' | 'mit' | 'by25' | 'by3' | 'by4' | 'pd'
 type RawIcon = {
@@ -387,3 +387,27 @@ export function ensureIcons(ids: Iterable<string>): Promise<void> {
 }
 
 export const scopeIds = (inner: string, itemId: string) => inner.split(P).join(`i${itemId}-`)
+
+export type SourceId = 'bioicons' | 'bioart' | 'commons' | 'phylopic' | 'health'
+/** Where each drawing comes from. The names are proper names, so they are not translated. */
+export const SOURCES: { id: SourceId; label: string }[] = [
+  { id: 'bioicons', label: 'Bioicons' },
+  { id: 'bioart', label: 'NIH BioArt Source' },
+  { id: 'commons', label: 'Wikimedia Commons' },
+  { id: 'phylopic', label: 'PhyloPic' },
+  { id: 'health', label: 'Health Icons' },
+]
+
+export function sourceOf(m: IconMeta): SourceId {
+  if (m.via === 'Wikimedia Commons') return 'commons'
+  if (m.via === 'PhyloPic') return 'phylopic'
+  if (m.via === 'Health Icons') return 'health'
+  if (m.collection) return 'bioart'
+  return 'bioicons'
+}
+
+/** CC0 and public-domain drawings carry no license condition; everything else (CC BY, MIT) asks for credit. */
+export const isOpenLicense = (m: IconMeta) => m.license.startsWith('CC0') || m.license === 'Public Domain'
+
+/** The library icon an item draws, if any: an icon, or the lipid a membrane repeats. */
+export const iconIdOf = (i: Item): string | null => (i.type === 'icon' || i.type === 'membrane' ? i.iconId : null)

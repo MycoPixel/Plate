@@ -240,15 +240,15 @@
   border-color: var(--hema);
   box-shadow: 0 0 0 2px var(--hema-soft);
 }
+/* IconGrid sets each tile's place, so the scroll box can be exactly as tall as the list */
 .tiles {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-content: start;
-  gap: 8px;
   padding: 12px;
+}
+.tiles-canvas {
+  position: relative;
 }
 .tile {
   position: relative;
@@ -257,15 +257,14 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+  /* fixed, so IconGrid can work out which rows fall inside the scroll box */
+  height: 120px;
   padding: 18px 8px 8px;
   background: #fff;
   border: 1px solid var(--line-2);
   border-radius: var(--radius);
   cursor: grab;
   text-align: center;
-  /* with ~1,600 tiles, skip layout and paint for the ones scrolled out of view */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 124px;
 }
 .tile:hover {
   border-color: var(--hema);
@@ -283,7 +282,8 @@
   max-width: 100%;
   overflow: hidden;
   font-size: 12px;
-  line-height: 1.2;
+  /* exactly 14px, so a tile is exactly the 120px IconGrid puts in each row */
+  line-height: 14px;
   color: var(--ink-2);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -450,6 +450,7 @@
   grid-column: 1 / -1;
 }
 input[type='number'],
+input[type='text'],
 select,
 textarea {
   width: 100%;
@@ -467,6 +468,7 @@ textarea {
   line-height: 1.35;
 }
 input[type='number']:focus,
+input[type='text']:focus,
 select:focus,
 textarea:focus {
   outline: none;
@@ -748,4 +750,159 @@ input[type='checkbox'] {
     visibility: visible;
     transition-delay: 0s;
   }
+}
+
+/* ---------- library tabs, favourites ---------- */
+.seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 2px;
+  background: var(--line-2);
+  border-radius: var(--radius);
+}
+.seg button {
+  height: 26px;
+  padding: 0 8px;
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.seg button[aria-pressed='true'] {
+  background: #fff;
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(19, 38, 47, 0.18);
+}
+.palette-head .grid2 select {
+  font-size: 12.5px;
+}
+.tile-wrap {
+  position: absolute;
+  display: grid;
+  min-width: 0;
+  height: 120px;
+}
+.tile-wrap .tile {
+  width: 100%;
+}
+.tile-fav {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--ink-2);
+  opacity: 0;
+}
+.tile-wrap:hover .tile-fav,
+.tile-fav:focus-visible,
+.tile-fav[aria-pressed='true'] {
+  opacity: 1;
+}
+.tile-fav[aria-pressed='true'] {
+  color: #c98a00;
+}
+.tile-fav:hover {
+  background: var(--line-2);
+}
+@media (hover: none) {
+  .tile-fav {
+    opacity: 0.7;
+  }
+}
+.tile-lic[data-lic='PD'] {
+  background: #dcefe5;
+  color: #1d5a3e;
+}
+
+/* ---------- text: sub/superscript buttons ---------- */
+.script-btn {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+}
+.script-btn sub,
+.script-btn sup {
+  font-size: 9px;
+}
+.script-hint {
+  margin: 0 0 8px;
+}
+
+/* ---------- export dialog ---------- */
+.export-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+}
+.export-grid .field {
+  margin-bottom: 4px;
+}
+.export-summary {
+  margin: 0;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+.dialog-actions {
+  gap: 8px;
+}
+
+/* ---------- replace icon ---------- */
+.dialog-wide {
+  width: min(620px, calc(100vw - 32px));
+}
+.replace-head {
+  display: grid;
+  gap: 8px;
+}
+.dialog .tiles {
+  flex: none;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+}
+.dialog .palette-foot {
+  margin: 0;
+  padding: 0;
+  border-top: 0;
+}
+.btn.wide {
+  justify-content: center;
+  width: 100%;
+}
+
+/* ---------- connected arrows ---------- */
+.handle-attached {
+  fill: var(--hema);
+  stroke: #fff;
+}
+.connect-target {
+  fill: rgba(70, 60, 155, 0.1);
+  stroke: var(--hema);
+  stroke-width: 2;
+}
+.conn-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.conn-row .field {
+  flex: 1;
+}
+.conn-row .mini {
+  margin-bottom: 8px;
+}
+.conn-free {
+  margin: 0 0 6px;
 }

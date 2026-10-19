@@ -1,19 +1,47 @@
 import { measureText } from './geometry'
-import { ICON_BY_ID } from './icons'
+import { ICON_BY_ID, iconIdOf } from './icons'
 import { t } from './i18n'
-import type { Doc, IconMeta } from './types'
+import type { Doc, IconMeta, ImageItem } from './types'
 
 /** Icons used in the figure, one entry per icon, in layer order. */
 export function usedIcons(doc: Doc): IconMeta[] {
   const seen = new Set<string>()
   const out: IconMeta[] = []
   for (const it of doc.items) {
-    if (it.type !== 'icon' || seen.has(it.iconId)) continue
-    seen.add(it.iconId)
-    const m = ICON_BY_ID.get(it.iconId)
+    const id = iconIdOf(it)
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    const m = ICON_BY_ID.get(id)
     if (m) out.push(m)
   }
   return out
+}
+
+const hasCredit = (i: ImageItem) => !!(i.author || i.license || i.source)
+
+/** Pictures the user brought and credited, one per distinct credit. Structures drawn from SMILES need none. */
+export function creditedImages(doc: Doc): ImageItem[] {
+  const seen = new Set<string>()
+  const out: ImageItem[] = []
+  for (const it of doc.items) {
+    if (it.type !== 'image' || it.smiles !== undefined || !hasCredit(it)) continue
+    const key = [it.name, it.author, it.license, it.source].join('|')
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(it)
+  }
+  return out
+}
+
+/** How many different pictures the user brought without saying whose they are or under what license. */
+export function uncreditedImageCount(doc: Doc): number {
+  const seen = new Set<string>()
+  for (const it of doc.items) if (it.type === 'image' && it.smiles === undefined && !hasCredit(it)) seen.add(it.src)
+  return seen.size
+}
+
+export function imageCredit(i: ImageItem): string {
+  return [i.name || t('Image'), i.author ? ` ${t('by')} ${i.author}` : '', i.license ? ` (${i.license})` : '', i.source ? `, ${i.source}` : ''].join('')
 }
 
 /** The web address the artwork can be traced back to. */
@@ -55,9 +83,10 @@ function credit(m: IconMeta, recoloured: boolean): string {
 
 export function creditsText(doc: Doc): string {
   const used = usedIcons(doc)
-  if (!used.length) return ''
+  const images = creditedImages(doc)
+  if (!used.length && !images.length) return ''
   // CC BY asks that changes are mentioned, and recolouring is a change.
-  const recoloured = new Set(doc.items.flatMap((i) => (i.type === 'icon' && i.colors ? [i.iconId] : [])))
+  const recoloured = new Set(doc.items.flatMap((i) => ((i.type === 'icon' || i.type === 'membrane') && i.colors ? [i.iconId] : [])))
   // The icon names stay in the original language so each credit can be traced to its source.
   const commons = used.filter((m) => m.via === 'Wikimedia Commons')
   const phylopic = used.filter((m) => m.via === 'PhyloPic')
@@ -92,6 +121,9 @@ export function creditsText(doc: Doc): string {
       t('Illustrations from the NIH BioArt Source: {list}.', { list: bioart.map((m) => credit(m, recoloured.has(m.id))).join('; ') }),
     )
   }
+  if (images.length) {
+    lines.push(t('Imported images: {list}.', { list: images.map(imageCredit).join('; ') }))
+  }
   return lines.join(' ')
 }
 
@@ -100,7 +132,7 @@ export function wrapLines(text: string, maxWidth: number, fontSize: number): str
   let cur = ''
   for (const word of text.split(' ')) {
     const next = cur ? `${cur} ${word}` : word
-    if (cur && measureText({ text: next, fontSize, bold: false, italic: false }).w > maxWidth) {
+    if (cur && measureText({ text: next, fontSize, bold: false, italic: false }, true).w > maxWidth) {
       lines.push(cur)
       cur = word
     } else {

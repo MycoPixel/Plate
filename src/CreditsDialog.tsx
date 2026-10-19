@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { creditsText, usedIcons } from './credits'
+import { creditedImages, creditsText, uncreditedImageCount, usedIcons } from './credits'
 import { Glyph } from './Glyph'
 import { iconUrl } from './icons'
 import { iconLabel, t, useLang } from './i18n'
@@ -31,6 +31,8 @@ export function CreditsDialog({
   }, [open])
 
   const used = usedIcons(doc)
+  const images = creditedImages(doc)
+  const missing = uncreditedImageCount(doc)
   const text = creditsText(doc)
 
   const copy = async () => {
@@ -52,10 +54,13 @@ export function CreditsDialog({
           </button>
         </header>
 
-        {used.length === 0 ? (
-          <p className="note">
-            {t('No library icons are on the board yet. When you add some, the author and license of each one will be listed here.')}
-          </p>
+        {used.length === 0 && images.length === 0 ? (
+          <>
+            <p className="note">
+              {t('No library icons are on the board yet. When you add some, the author and license of each one will be listed here.')}
+            </p>
+            {missing > 0 && <p className="note error">{t('Imported images without license info: {n}. Add the author and license in the image’s properties so they appear in the credit line.', { n: missing })}</p>}
+          </>
         ) : (
           <>
             <p className="note">
@@ -88,7 +93,31 @@ export function CreditsDialog({
                   </div>
                 </li>
               ))}
+              {images.map((im) => (
+                <li key={im.id}>
+                  <img src={im.src} alt="" />
+                  <div>
+                    <strong>{im.name || t('Image')}</strong>
+                    <span>
+                      {[im.author, im.license].filter(Boolean).join(', ')}
+                      {im.source && (
+                        <>
+                          {im.author || im.license ? ', ' : ''}
+                          {/^https?:\/\//i.test(im.source) ? (
+                            <a href={im.source} target="_blank" rel="noreferrer">
+                              {im.source.replace(/^https?:\/\//i, '').split('/')[0]}
+                            </a>
+                          ) : (
+                            im.source
+                          )}
+                        </>
+                      )}
+                    </span>
+                  </div>
+                </li>
+              ))}
             </ul>
+            {missing > 0 && <p className="note error">{t('Imported images without license info: {n}. Add the author and license in the image’s properties so they appear in the credit line.', { n: missing })}</p>}
             <label className="field wide">
               <span className="sr-only">{t('Credit line')}</span>
               <textarea readOnly rows={4} value={text} onFocus={(e) => e.currentTarget.select()} />
