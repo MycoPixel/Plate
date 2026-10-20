@@ -1,0 +1,13 @@
+{
+  "icons": [
+    {
+      "id": "custom-nmr-spectrometer",
+      "label": "NMR spectrometer",
+      "category": "Equipment",
+      "author": "Paulo Castro",
+      "license": "cc0",
+      "inline": true,
+      "viewBox": [0, 0, 833, 1459]
+    }
+  ]
+}

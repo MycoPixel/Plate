@@ -92,7 +92,8 @@ export function creditsText(doc: Doc): string {
   const phylopic = used.filter((m) => m.via === 'PhyloPic')
   const health = used.filter((m) => m.via === 'Health Icons')
   const bioart = used.filter((m) => m.collection && !m.via)
-  const bioicons = used.filter((m) => !m.collection && !m.via)
+  const bioicons = used.filter((m) => !m.collection && !m.via && !m.custom)
+  const custom = used.filter((m) => m.custom)
   const lines = []
   if (bioicons.length) {
     lines.push(
@@ -120,6 +121,9 @@ export function creditsText(doc: Doc): string {
     lines.push(
       t('Illustrations from the NIH BioArt Source: {list}.', { list: bioart.map((m) => credit(m, recoloured.has(m.id))).join('; ') }),
     )
+  }
+  if (custom.length) {
+    lines.push(t('Your own drawings: {list}.', { list: custom.map((m) => credit(m, recoloured.has(m.id))).join('; ') }))
   }
   if (images.length) {
     lines.push(t('Imported images: {list}.', { list: images.map(imageCredit).join('; ') }))

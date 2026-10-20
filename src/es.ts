@@ -622,4 +622,6 @@ export const ES: Record<string, string> = {
   'Restore': 'Restaurar',
   'Delete this version': 'Eliminar esta versión',
   'Restored the version from {when}. The state it replaced is still in the history.': 'Versión del {when} restaurada. El estado que reemplazó sigue en el historial.',
+  'Your icons': 'Tus iconos',
+  'Your own drawings: {list}.': 'Tus propios dibujos: {list}.',
 }

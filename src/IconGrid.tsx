@@ -63,7 +63,7 @@ export function IconFilterHead({ f }: { f: IconFilter }) {
           <option value="all">{t('All sources')}</option>
           {SOURCES.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.label}
+              {t(s.label)}
             </option>
           ))}
         </select>
@@ -100,7 +100,7 @@ type Props = {
 }
 
 /**
- * A windowed grid of icon tiles. The library holds 2,885 drawings, far too many to
+ * A windowed grid of icon tiles. The library holds 2,886 drawings, far too many to
  * keep in the DOM at once, so only the rows near the viewport are rendered and the
  * rest is left as scroll space.
  */

@@ -85,10 +85,14 @@ export function CreditsDialog({
                       <a href={m.licenseUrl} target="_blank" rel="noreferrer">
                         {m.license}
                       </a>
-                      ,{' '}
-                      <a href={m.source} target="_blank" rel="noreferrer">
-                        {new URL(m.source).hostname}
-                      </a>
+                      {m.source && (
+                        <>
+                          ,{' '}
+                          <a href={m.source} target="_blank" rel="noreferrer">
+                            {new URL(m.source).hostname}
+                          </a>
+                        </>
+                      )}
                     </span>
                   </div>
                 </li>

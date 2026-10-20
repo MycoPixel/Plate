@@ -770,10 +770,14 @@ export function Inspector(props: Props) {
               <a href={meta.licenseUrl} target="_blank" rel="noreferrer">
                 {meta.license}
               </a>
-              ,{' '}
-              <a href={meta.source} target="_blank" rel="noreferrer">
-                {new URL(meta.source).hostname}
-              </a>
+              {meta.source && (
+                <>
+                  ,{' '}
+                  <a href={meta.source} target="_blank" rel="noreferrer">
+                    {new URL(meta.source).hostname}
+                  </a>
+                </>
+              )}
               {t('. Added to your credits automatically.')}
               {one.colors ? t(' Recoloured icons are credited as adapted.') : ''}
             </p>

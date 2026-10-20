@@ -22,6 +22,8 @@ export type IconMeta = {
   via?: string
   /** Extra words to search, when the source ships its own keywords. */
   tags?: string[]
+  /** Drawings added to the project by its users, rather than imported from a library. */
+  custom?: boolean
 }
 
 export type FontId = 'sans' | 'serif' | 'mono'

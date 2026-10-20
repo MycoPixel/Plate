@@ -4,6 +4,7 @@ import rawBioart from './icons.bioart.json'
 import rawCommons from './icons.commons.json'
 import rawPhylopic from './icons.phylopic.json'
 import rawHealth from './icons.healthicons.json'
+import rawCustom from './icons.custom.json'
 import type { IconMeta, Item } from './types'
 
 type LicenseKey = 'cc0' | 'mit' | 'by25' | 'by3' | 'by4' | 'pd'
@@ -35,6 +36,7 @@ type RawPhylopicIcon = RawIcon & { licenseUrl: string; uuid: string }
 const { icons: rawPhylopicIcons } = rawPhylopic as unknown as { icons: RawPhylopicIcon[] }
 type RawHealthIcon = RawIcon & { licenseUrl: string; style: string; healthCategory: string; tags: string[] }
 const { icons: rawHealthIcons } = rawHealth as unknown as { icons: RawHealthIcon[] }
+const { icons: rawCustomIcons } = rawCustom as unknown as { icons: RawIcon[] }
 
 // icons.json stores only what varies per icon; the rest is derived here.
 const LICENSES = {
@@ -125,12 +127,28 @@ const fromHealth = (r: RawHealthIcon): IconMeta => ({
   tags: r.tags,
 })
 
+const fromCustom = (r: RawIcon): IconMeta => ({
+  id: r.id,
+  label: r.label,
+  category: r.category,
+  file: `icons/${r.id}.svg`,
+  inline: r.inline,
+  viewBox: r.viewBox,
+  license: LICENSES[r.license].name,
+  licenseUrl: LICENSES[r.license].url,
+  author: r.author,
+  authorUrl: '',
+  source: '',
+  custom: true,
+})
+
 export const ICONS: IconMeta[] = [
   ...rawIcons.map(fromBioicons),
   ...rawBioartIcons.map(fromBioart),
   ...rawCommonsIcons.map(fromCommons),
   ...rawPhylopicIcons.map(fromPhylopic),
   ...rawHealthIcons.map(fromHealth),
+  ...rawCustomIcons.map(fromCustom),
 ]
 export const ICON_BY_ID = new Map(ICONS.map((i) => [i.id, i]))
 export const CATEGORIES = Array.from(new Set(ICONS.map((i) => i.category))).sort((a, b) =>
@@ -388,7 +406,7 @@ export function ensureIcons(ids: Iterable<string>): Promise<void> {
 
 export const scopeIds = (inner: string, itemId: string) => inner.split(P).join(`i${itemId}-`)
 
-export type SourceId = 'bioicons' | 'bioart' | 'commons' | 'phylopic' | 'health'
+export type SourceId = 'bioicons' | 'bioart' | 'commons' | 'phylopic' | 'health' | 'custom'
 /** Where each drawing comes from. The names are proper names, so they are not translated. */
 export const SOURCES: { id: SourceId; label: string }[] = [
   { id: 'bioicons', label: 'Bioicons' },
@@ -396,9 +414,11 @@ export const SOURCES: { id: SourceId; label: string }[] = [
   { id: 'commons', label: 'Wikimedia Commons' },
   { id: 'phylopic', label: 'PhyloPic' },
   { id: 'health', label: 'Health Icons' },
+  { id: 'custom', label: 'Your icons' },
 ]
 
 export function sourceOf(m: IconMeta): SourceId {
+  if (m.custom) return 'custom'
   if (m.via === 'Wikimedia Commons') return 'commons'
   if (m.via === 'PhyloPic') return 'phylopic'
   if (m.via === 'Health Icons') return 'health'
