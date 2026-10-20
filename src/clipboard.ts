@@ -21,11 +21,11 @@ export const setClipboardVerified = (v: boolean) => {
 }
 
 export function copyItems(items: Item[]): string {
-  const marker = `Plate: ${items.length} ${items.length === 1 ? 'item' : 'items'} #${uid()}`
+  const marker = `EnlacePlot: ${items.length} ${items.length === 1 ? 'item' : 'items'} #${uid()}`
   mem = { marker, items: structuredClone(items) }
   pastes = 0
   try {
-    localStorage.setItem(KEY, JSON.stringify({ app: 'plate', marker, items }))
+    localStorage.setItem(KEY, JSON.stringify({ app: 'enlaceplot', marker, items }))
   } catch {
     // Too big for localStorage (large images): this tab can still paste, others cannot.
     try {

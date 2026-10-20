@@ -93,7 +93,7 @@ export function HistoryDialog({
           </button>
         </header>
         <p className="note">
-          {t('Plate keeps the last 30 versions of this figure while you work, at most one every few minutes. Restoring one first saves the current state as a new version, so nothing is lost.')}
+          {t('EnlacePlot keeps the last 30 versions of this figure while you work, at most one every few minutes. Restoring one first saves the current state as a new version, so nothing is lost.')}
         </p>
         <div className="dialog-actions start">
           <button

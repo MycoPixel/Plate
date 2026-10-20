@@ -111,8 +111,8 @@ export const ES: Record<string, string> = {
   // messages
   'Started a new figure. Undo brings the previous one back.': 'Empezaste una figura nueva. Deshacer recupera la anterior.',
   'Project saved. Open it again from File, then Open project.': 'Proyecto guardado. Vuelve a abrirlo desde Archivo, Abrir proyecto.',
-  'That file is not a Plate project. Choose a .plate.json file you saved from here.':
-    'Ese archivo no es un proyecto de Plate. Elige un archivo .plate.json guardado desde aquí.',
+  'That file is not an EnlacePlot project. Choose a .enlaceplot.json file you saved from here.':
+    'Ese archivo no es un proyecto de EnlacePlot. Elige un archivo .enlaceplot.json guardado desde aquí.',
   'Opened “{title}”.': 'Se abrió «{title}».',
   'Exported.': 'Exportado.',
   'Exported. Some icons need credit, so add the credit line from the Credits button.':
@@ -186,8 +186,8 @@ export const ES: Record<string, string> = {
 
   // structure dialog
   'Chemical structure': 'Estructura química',
-  'Paste a SMILES string and Plate draws the skeletal structure as an editable picture you can place, resize and export with the rest of the figure.':
-    'Pega una cadena SMILES y Plate dibuja la estructura esquelética como una imagen que puedes ubicar, redimensionar y exportar junto con el resto de la figura.',
+  'Paste a SMILES string and EnlacePlot draws the skeletal structure as an editable picture you can place, resize and export with the rest of the figure.':
+    'Pega una cadena SMILES y EnlacePlot dibuja la estructura esquelética como una imagen que puedes ubicar, redimensionar y exportar junto con el resto de la figura.',
   SMILES: 'SMILES',
   Examples: 'Ejemplos',
   Benzene: 'Benceno',
@@ -613,7 +613,7 @@ export const ES: Record<string, string> = {
   'Copy this link': 'Copia este enlace',
   'Version history': 'Historial de versiones',
   'Version history…': 'Historial de versiones…',
-  'Plate keeps the last 30 versions of this figure while you work, at most one every few minutes. Restoring one first saves the current state as a new version, so nothing is lost.': 'Plate guarda las últimas 30 versiones de esta figura mientras trabajas, como mucho una cada pocos minutos. Al restaurar una, el estado actual se guarda antes como versión nueva, así no se pierde nada.',
+  'EnlacePlot keeps the last 30 versions of this figure while you work, at most one every few minutes. Restoring one first saves the current state as a new version, so nothing is lost.': 'EnlacePlot guarda las últimas 30 versiones de esta figura mientras trabajas, como mucho una cada pocos minutos. Al restaurar una, el estado actual se guarda antes como versión nueva, así no se pierde nada.',
   'Save a version now': 'Guardar una versión ahora',
   'Versions start once this figure has been saved in this browser.': 'Las versiones empiezan cuando esta figura se guarda en este navegador.',
   'No versions yet. One is saved as you keep working.': 'Todavía no hay versiones. Se guardará una a medida que sigas trabajando.',

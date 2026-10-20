@@ -70,7 +70,7 @@ export function StructureDialog({
           </button>
         </header>
         <p className="note">
-          {t('Paste a SMILES string and Plate draws the skeletal structure as an editable picture you can place, resize and export with the rest of the figure.')}
+          {t('Paste a SMILES string and EnlacePlot draws the skeletal structure as an editable picture you can place, resize and export with the rest of the figure.')}
         </p>
         <label className="field wide">
           <span>{t('SMILES')}</span>

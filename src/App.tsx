@@ -252,7 +252,7 @@ export default function App() {
     }
   }, [booted, flush])
   useEffect(() => {
-    document.title = `${doc.title || t('Untitled figure')} – Plate`
+    document.title = `${doc.title || t('Untitled figure')} – EnlacePlot`
   }, [doc.title, lang])
 
   const patchItems = useCallback(
@@ -561,7 +561,7 @@ export default function App() {
     [set, say],
   )
 
-  // Pasting puts a copied picture, or items copied inside Plate, on the board.
+  // Pasting puts a copied picture, or items copied inside EnlacePlot, on the board.
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       if (isTextEntry(e.target) || document.querySelector('dialog[open]')) return
@@ -760,7 +760,7 @@ export default function App() {
   }, [doc, say])
 
   const saveProject = useCallback(() => {
-    download(new Blob([serializeProject(doc)], { type: 'application/json' }), `${fileSlug(doc.title)}.plate.json`)
+    download(new Blob([serializeProject(doc)], { type: 'application/json' }), `${fileSlug(doc.title)}.enlaceplot.json`)
     say(t('Project saved. Open it again from File, then Open project.'))
   }, [doc, say])
 
@@ -768,7 +768,7 @@ export default function App() {
     if (!file) return
     const parsed = parseProject(await file.text())
     if (!parsed) {
-      say(t('That file is not a Plate project. Choose a .plate.json file you saved from here.'))
+      say(t('That file is not an EnlacePlot project. Choose a .enlaceplot.json file you saved from here.'))
       return
     }
     try {
@@ -948,7 +948,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand">
           <Logo />
-          <span>Plate</span>
+          <span>EnlacePlot</span>
         </div>
         <input
           className="title"

@@ -255,7 +255,7 @@ export function sanitizeDoc(raw: unknown): Doc | null {
 }
 
 export const serializeProject = (doc: Doc) =>
-  JSON.stringify({ app: 'plate', version: 1, doc }, null, 1)
+  JSON.stringify({ app: 'enlaceplot', version: 1, doc }, null, 1)
 
 export function parseProject(text: string): Doc | null {
   try {

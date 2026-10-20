@@ -1,6 +1,6 @@
-/* Offline shell for Plate. Hashed scripts and styles are cached as they are fetched;
+/* Offline shell for EnlacePlot. Hashed scripts and styles are cached as they are fetched;
    icons and images are left to the network so the cache cannot grow without end. */
-const CACHE = 'plate-v1'
+const CACHE = 'enlaceplot-v1'
 const KEEP = [CACHE]
 
 self.addEventListener('install', () => {
