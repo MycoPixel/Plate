@@ -36,6 +36,9 @@ export function useHistory<T>(initial: T) {
     setH((s) => ({ past: [...s.past.slice(-LIMIT), s.present], present: s.present, future: [] }))
   }, [])
 
+  /** Opens a different figure: drop the undo stack, which belongs to the old one. */
+  const reset = useCallback((next: T) => setH({ past: [], present: next, future: [] }), [])
+
   const undo = useCallback(() => {
     last.current = null
     setH((s) =>
@@ -57,6 +60,7 @@ export function useHistory<T>(initial: T) {
   return {
     doc: h.present,
     set,
+    reset,
     checkpoint,
     undo,
     redo,

@@ -384,6 +384,127 @@
   stroke-width: 1;
   stroke-dasharray: 4 3;
 }
+/* ---------- templates ---------- */
+.tpl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.tpl {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  text-align: left;
+}
+.tpl:hover {
+  border-color: var(--hema);
+}
+.tpl-label {
+  font-weight: 600;
+}
+
+/* ---------- my figures ---------- */
+.gallery {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 10px;
+  max-height: 46vh;
+  overflow: auto;
+}
+.gallery-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto auto;
+  gap: 2px 6px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+}
+.gallery-thumb {
+  grid-column: 1 / -1;
+  display: grid;
+  place-items: center;
+  height: 92px;
+  background:
+    linear-gradient(45deg, #f3f6f8 25%, transparent 25%, transparent 75%, #f3f6f8 75%) 0 0 / 16px 16px,
+    #fafcfd;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 4px;
+}
+.gallery-thumb img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.gallery-title {
+  grid-column: 1;
+  font-weight: 600;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gallery-item .note {
+  grid-column: 1 / -1;
+}
+
+/* ---------- colourblind preview ---------- */
+.cvd {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-2);
+}
+.cvd select {
+  border: 0;
+  background: transparent;
+  font-size: 12.5px;
+  color: var(--ink);
+  max-width: 14ch;
+}
+
+/* ---------- more shapes ---------- */
+.tools-split {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 2px;
+  background: var(--line-2);
+}
+.more-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--glass);
+}
+.more-tools .note.small {
+  margin: 0 0 0 6px;
+  max-width: 46ch;
+}
+
+/* ---------- smart guides ---------- */
+.guide {
+  stroke: #e0399b;
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+  opacity: 0.9;
+}
 .icon-loading {
   fill: #e8eef1;
 }
@@ -448,6 +569,11 @@
 }
 .field.wide {
   grid-column: 1 / -1;
+}
+.gen-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
 input[type='number'],
 input[type='text'],

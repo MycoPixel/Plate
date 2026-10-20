@@ -12,6 +12,7 @@ import {
   rectsIntersect,
   resizeItem,
   snapAngle,
+  snapToItems,
   transformAttr,
   translateItem,
   unionAabb,
@@ -19,28 +20,41 @@ import {
 import { expandGroups } from './groups'
 import { getIcon, ICON_BY_ID, iconDataUri, resolveColors, scopeIds, useIconCacheVersion } from './icons'
 import { detachOutside, targetAt } from './connectors'
-import { newArrow, newMembrane, newShape } from './defaults'
+import { newArrow, newLine, newMembrane, newShape } from './defaults'
 import { lipidTransform, membraneLayout } from './membrane'
+import { COLOR_VISION } from './colorvision'
+import { chartEls } from './charts'
+import { shapeEls } from './shapes'
 import { t, useLang } from './i18n'
 import { ICON_MIME } from './iconFilter'
-import type { ArrowItem, Doc, Handle, IconItem, ImageItem, Item, MembraneItem, Pt, Rect, ShapeItem, TextItem, Tool } from './types'
+import { markerNumber } from './markers'
+import type { ArrowItem, ChartItem, ColorVision, Doc, Handle, IconItem, ImageItem, Item, MembraneItem, Pt, Rect, ShapeItem, TextItem, Tool } from './types'
+import type { Guide } from './geometry'
 import { clamp, isFormTarget } from './util'
 
 type Drag =
   | { kind: 'move'; start: Pt; origin: Map<string, Item>; primary: string; moved: boolean; shift: boolean }
-  | { kind: 'resize'; handle: Handle; origin: IconItem | ImageItem | ShapeItem | TextItem; moved: boolean }
-  | { kind: 'rotate'; origin: IconItem | ImageItem | ShapeItem | TextItem; center: Pt; startAngle: number; moved: boolean }
+  | { kind: 'resize'; handle: Handle; origin: IconItem | ImageItem | ShapeItem | TextItem | ChartItem; moved: boolean }
+  | { kind: 'rotate'; origin: IconItem | ImageItem | ShapeItem | TextItem | ChartItem; center: Pt; startAngle: number; moved: boolean }
   | { kind: 'arrowEnd'; which: 1 | 2; origin: ArrowItem; moved: boolean }
   | { kind: 'arrowBend'; origin: ArrowItem; moved: boolean }
-  | { kind: 'create'; tool: 'arrow' | 'rect' | 'ellipse' | 'membrane'; start: Pt; id: string | null; from: string | null }
+  | { kind: 'create'; tool: CreateTool; start: Pt; id: string | null; from: string | null }
+  /** A polygon or curve being drawn: each click drops a corner, and the shape lives on as we go. */
+  | { kind: 'draft'; tool: 'poly' | 'path'; id: string | null; pts: Pt[] }
   | { kind: 'lineEnd'; which: 1 | 2; origin: MembraneItem; moved: boolean }
   | { kind: 'lineBend'; origin: MembraneItem; moved: boolean }
   | { kind: 'marquee'; start: Pt; base: string[]; moved: boolean }
   | { kind: 'pan'; sx: number; sy: number; left: number; top: number }
 
+type CreateTool = 'arrow' | 'line' | 'rect' | 'ellipse' | 'membrane' | 'bracket' | 'brace' | 'callout'
+/** A click on the first corner closes a polygon; double-click or Enter finishes either kind. */
+const CLOSE_PX = 10
+
 const GRID = 8
 /** How close, in screen pixels, a pointer has to be to an item for an arrow end to attach to it. */
 const ATTACH_PX = 6
+/** How close, in screen pixels, two edges have to be for a smart guide to grab them. */
+const GUIDE_PX = 6
 const CURSORS: Record<Handle, string> = {
   nw: 'nwse-resize',
   se: 'nwse-resize',
@@ -164,7 +178,7 @@ const MembraneView = memo(function MembraneView({ item, zoom }: { item: Membrane
   )
 })
 
-const ItemView = memo(function ItemView({ item, zoom, v }: { item: Item; zoom: number; v: number }) {
+const ItemView = memo(function ItemView({ item, zoom, v, doc }: { item: Item; zoom: number; v: number; doc: Doc }) {
   switch (item.type) {
     case 'icon':
       return <IconView item={item} v={v} />
@@ -189,11 +203,6 @@ const ItemView = memo(function ItemView({ item, zoom, v }: { item: Item; zoom: n
         </g>
       )
     case 'shape': {
-      const common = {
-        fill: item.fill,
-        stroke: item.strokeWidth > 0 ? item.stroke : 'none',
-        strokeWidth: item.strokeWidth > 0 ? item.strokeWidth : undefined,
-      }
       return (
         <g
           data-id={item.id}
@@ -201,11 +210,76 @@ const ItemView = memo(function ItemView({ item, zoom, v }: { item: Item; zoom: n
           opacity={item.opacity < 1 ? item.opacity : undefined}
           data-locked={item.locked || undefined}
         >
-          {item.shape === 'rect' ? (
-            <rect x={item.x} y={item.y} width={item.w} height={item.h} rx={item.radius || undefined} {...common} />
-          ) : (
-            <ellipse cx={item.x + item.w / 2} cy={item.y + item.h / 2} rx={item.w / 2} ry={item.h / 2} {...common} />
+          {shapeEls(item).map((el, k) =>
+            el.kind === 'rect' ? (
+              <rect key={k} x={el.x} y={el.y} width={el.w} height={el.h} rx={el.rx || undefined} fill={el.fill} stroke={el.stroke} strokeWidth={el.strokeWidth || undefined} />
+            ) : el.kind === 'ellipse' ? (
+              <ellipse key={k} cx={el.cx} cy={el.cy} rx={el.rx} ry={el.ry} fill={el.fill} stroke={el.stroke} strokeWidth={el.strokeWidth || undefined} />
+            ) : (
+              <path key={k} d={el.d} fill={el.fill} stroke={el.stroke} strokeWidth={el.strokeWidth || undefined} />
+            ),
           )}
+        </g>
+      )
+    }
+    case 'chart': {
+      const els = chartEls(item)
+      return (
+        <g data-id={item.id} transform={transformAttr(item)} opacity={item.opacity < 1 ? item.opacity : undefined} data-locked={item.locked || undefined}>
+          <rect x={item.x} y={item.y} width={item.w} height={item.h} fill="transparent" />
+          <g pointerEvents="none">
+            {els.map((el, k) =>
+              el.kind === 'rect' ? (
+                <rect key={k} x={el.x} y={el.y} width={el.w} height={el.h} rx={el.rx || undefined} fill={el.fill} stroke={el.stroke} strokeWidth={el.strokeWidth || undefined} />
+              ) : el.kind === 'line' ? (
+                <line key={k} x1={el.x1} y1={el.y1} x2={el.x2} y2={el.y2} stroke={el.stroke} strokeWidth={el.strokeWidth || undefined} strokeDasharray={el.dash} />
+              ) : el.kind === 'circle' ? (
+                <circle key={k} cx={el.cx} cy={el.cy} r={el.r} fill={el.fill} stroke={el.stroke} strokeWidth={el.strokeWidth || undefined} />
+              ) : el.kind === 'path' ? (
+                <path key={k} d={el.d} fill={el.fill} stroke={el.stroke} strokeWidth={el.strokeWidth || undefined} />
+              ) : (
+                <text
+                  key={k}
+                  x={el.x}
+                  y={el.y}
+                  fontFamily={fontFamily('sans')}
+                  fontSize={el.size}
+                  fill={el.fill}
+                  textAnchor={el.anchor}
+                  transform={el.rotate ? `rotate(${el.rotate} ${el.x} ${el.y})` : undefined}
+                >
+                  {el.text}
+                </text>
+              ),
+            )}
+          </g>
+        </g>
+      )
+    }
+    case 'marker': {
+      return (
+        <g data-id={item.id} opacity={undefined} data-locked={item.locked || undefined}>
+          <circle
+            cx={item.x}
+            cy={item.y}
+            r={item.size / 2}
+            fill={item.fill}
+            stroke={item.strokeWidth > 0 ? item.stroke : 'none'}
+            strokeWidth={item.strokeWidth || undefined}
+          />
+          <text
+            x={item.x}
+            y={item.y}
+            fontFamily={fontFamily('sans')}
+            fontSize={item.fontSize}
+            fontWeight={700}
+            fill={item.textFill}
+            textAnchor="middle"
+            dominantBaseline="central"
+            pointerEvents="none"
+          >
+            {markerNumber(doc, item.id)}
+          </text>
         </g>
       )
     }
@@ -440,6 +514,10 @@ export type CanvasProps = {
   zoom: number
   setZoom: (z: number) => void
   fitTick: number
+  /** Bumped to ask for the selection, rather than the whole board, to fill the view. */
+  zoomSelTick: number
+  /** Screen only. Exports always keep the real colours. */
+  colorVision: ColorVision
   snap: boolean
   showGrid: boolean
   setSelection: (ids: string[]) => void
@@ -455,11 +533,14 @@ export type CanvasProps = {
 export function Canvas(props: CanvasProps) {
   useLang()
   const { doc, selection, tool, zoom, snap, showGrid, setSelection, setDoc, checkpoint } = props
+  const { colorVision } = props
+  const { setZoom } = props
   const iconsV = useIconCacheVersion()
   const svgRef = useRef<SVGSVGElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
   const drag = useRef<Drag | null>(null)
   const [marquee, setMarquee] = useState<Rect | null>(null)
+  const [guides, setGuides] = useState<{ v: Guide[]; h: Guide[] }>({ v: [], h: [] })
   const [spaceDown, setSpaceDown] = useState(false)
   /** The item an arrow end would attach to right now (highlighted while drawing or dragging an end). */
   const [connectTo, setConnectTo] = useState<string | null>(null)
@@ -498,6 +579,28 @@ export function Canvas(props: CanvasProps) {
     setZoomRef.current(clamp(Number.isFinite(z) ? z : 1, 0.1, 2))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.fitTick])
+
+  // Fill the view with the selection instead of the whole board.
+  useEffect(() => {
+    if (props.zoomSelTick === 0) return
+    const el = stageRef.current
+    const svg = svgRef.current
+    const sel = doc.items.filter((i) => selection.includes(i.id) && !i.hidden)
+    if (!el || !svg || sel.length === 0) return
+    const r = unionAabb(sel)
+    const pad = 96
+    const z = clamp(
+      Math.min((el.clientWidth - pad) / Math.max(r.w, 1), (el.clientHeight - pad) / Math.max(r.h, 1)),
+      0.1,
+      4,
+    )
+    setZoom(z)
+    const er = el.getBoundingClientRect()
+    const sr = svg.getBoundingClientRect()
+    el.scrollLeft += sr.left + (r.x + r.w / 2) * z - (er.left + el.clientWidth / 2)
+    el.scrollTop += sr.top + (r.y + r.h / 2) * z - (er.top + el.clientHeight / 2)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.zoomSelTick])
 
   // Keep the point under the cursor fixed while zooming with the wheel.
   useLayoutEffect(() => {
@@ -550,8 +653,53 @@ export function Canvas(props: CanvasProps) {
     }
   }, [])
 
+  // Enter finishes a shape being drawn; Escape gives up on it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (drag.current?.kind !== 'draft') return
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        finishDraft()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        const id = drag.current.id
+        drag.current = null
+        if (id) setDoc((d) => ({ ...d, items: d.items.filter((i) => i.id !== id) }))
+        props.onToolDone()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.onToolDone])
+
   const patch = (id: string, fn: (it: Item) => Item) =>
     setDoc((d) => ({ ...d, items: d.items.map((it) => (it.id === id ? fn(it) : it)) }), false)
+
+  /** Keeps the shape being drawn inside the box that covers its corners. */
+  const updateDraft = (cursor: Pt) => {
+    const d = drag.current
+    if (d?.kind !== 'draft' || !d.id) return
+    const all = [...d.pts, cursor]
+    const x = Math.min(...all.map((q) => q.x))
+    const y = Math.min(...all.map((q) => q.y))
+    const w = Math.max(...all.map((q) => q.x)) - x
+    const h = Math.max(...all.map((q) => q.y)) - y
+    const pad = 6 / zoom
+    patch(d.id, (it) =>
+      it.type === 'shape'
+        ? { ...it, x: x - pad, y: y - pad, w: Math.max(1, w + pad * 2), h: Math.max(1, h + pad * 2), points: d.pts.map((q) => [(q.x - x + pad) / Math.max(1, w + pad * 2), (q.y - y + pad) / Math.max(1, h + pad * 2)] as [number, number]), }
+        : it,
+    )
+  }
+
+  /** Ends a shape being drawn and hands the tool back so it can start the next one. */
+  const finishDraft = () => {
+    drag.current = null
+    setDoc((d) => d)
+    props.onToolDone()
+  }
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const stage = stageRef.current
@@ -577,8 +725,34 @@ export function Canvas(props: CanvasProps) {
       drag.current = null
       return
     }
+    // Adding a corner to the shape being drawn. Clicking the first corner again closes a polygon.
+    const drafting = drag.current?.kind === 'draft' ? drag.current : null
+    if (tool === 'poly' || tool === 'path') {
+      const q = snapP(p)
+      if (drafting) {
+        const first = drafting.pts[0]
+        const closes = drafting.pts.length >= 3 && Math.hypot(q.x - first.x, q.y - first.y) * zoom < CLOSE_PX
+        if (closes || e.detail >= 2) {
+          finishDraft()
+          return
+        }
+        drafting.pts.push(q)
+        updateDraft(q)
+        return
+      }
+      checkpoint()
+      const made = newShape(tool, q)
+      drag.current = { kind: 'draft', tool, id: made.id, pts: [q] }
+      setDoc((doc0) => ({ ...doc0, items: [...doc0.items, made] }))
+      setSelection([made.id])
+      return
+    }
+    if (drafting) {
+      // Any other tool ends a shape left half-drawn rather than leaving it behind.
+      finishDraft()
+    }
     if (tool !== 'select') {
-      const from = tool === 'arrow' && !e.altKey ? targetAt(doc, p, ATTACH_PX / zoom) : null
+      const from = (tool === 'arrow' || tool === 'line') && !e.altKey ? targetAt(doc, p, ATTACH_PX / zoom) : null
       drag.current = { kind: 'create', tool, start: snapP(p), id: null, from: from?.id ?? null }
       return
     }
@@ -586,7 +760,7 @@ export function Canvas(props: CanvasProps) {
     const handle = target.closest('[data-handle]')?.getAttribute('data-handle')
     const only = selected.length === 1 ? selected[0] : null
     if (handle && only) {
-      if (handle === 'rotate' && only.type !== 'arrow' && only.type !== 'membrane') {
+      if (handle === 'rotate' && only.type !== 'arrow' && only.type !== 'membrane' && only.type !== 'marker') {
         const c = centerOf(boxOf(only))
         drag.current = {
           kind: 'rotate',
@@ -613,7 +787,7 @@ export function Canvas(props: CanvasProps) {
         drag.current = { kind: 'lineBend', origin: only, moved: false }
         return
       }
-      if (only.type !== 'arrow' && only.type !== 'membrane' && handle in CURSORS) {
+      if (only.type !== 'arrow' && only.type !== 'membrane' && only.type !== 'marker' && handle in CURSORS) {
         drag.current = { kind: 'resize', handle: handle as Handle, origin: only, moved: false }
         return
       }
@@ -683,12 +857,26 @@ export function Canvas(props: CanvasProps) {
           d.moved = true
           checkpoint()
         }
-        if (snap) {
-          const o = boxOf(d.origin.get(d.primary)!)
-          dx = snapV(o.x + dx) - o.x
-          dy = snapV(o.y + dy) - o.y
-        }
         const moving = new Set(d.origin.keys())
+        // Line the moving box up with whatever else is on the board, then fall back to the
+        // grid only if that lands closer than the objects do.
+        const base = unionAabb([...d.origin.values()])
+        const targets = [
+          ...doc.items.filter((it) => !moving.has(it.id) && !it.hidden).map(aabbOf),
+          { x: 0, y: 0, w: doc.width, h: doc.height },
+        ]
+        const s = snapToItems({ ...base, x: base.x + dx, y: base.y + dy }, targets, GUIDE_PX / zoom)
+        const anchor = d.origin.get(d.primary)
+        const gb = anchor ? boxOf(anchor) : base
+        // Both are extra nudges on top of dx/dy, so they can be compared and added the same way.
+        const gx = snap ? snapV(gb.x + dx) - (gb.x + dx) : 0
+        const gy = snap ? snapV(gb.y + dy) - (gb.y + dy) : 0
+        // The grid only wins where no object caught the box, or where it lands closer.
+        const useGridX = snap && (s.v.length === 0 || Math.abs(gx) < Math.abs(s.dx))
+        const useGridY = snap && (s.h.length === 0 || Math.abs(gy) < Math.abs(s.dy))
+        dx += useGridX ? gx : s.dx
+        dy += useGridY ? gy : s.dy
+        setGuides({ v: useGridX ? [] : s.v, h: useGridY ? [] : s.h })
         setDoc(
           (doc0) => ({
             ...doc0,
@@ -784,16 +972,18 @@ export function Canvas(props: CanvasProps) {
           const made =
             d.tool === 'arrow'
               ? { ...newArrow(d.start), from: d.from ? { id: d.from } : undefined }
-              : d.tool === 'membrane'
-                ? newMembrane(d.start)
-                : newShape(d.tool, d.start)
+              : d.tool === 'line'
+                ? { ...newLine(d.start), from: d.from ? { id: d.from } : undefined }
+                : d.tool === 'membrane'
+                  ? newMembrane(d.start)
+                  : newShape(d.tool, d.start)
           d.id = made.id
           setDoc((doc0) => ({ ...doc0, items: [...doc0.items, made] }), false)
           setSelection([made.id])
         }
         const id = d.id
         const q = snapP(p)
-        const hit = d.tool === 'arrow' && !e.altKey ? targetAt(doc, p, ATTACH_PX / zoom, d.from ?? undefined) : null
+        const hit = (d.tool === 'arrow' || d.tool === 'line') && !e.altKey ? targetAt(doc, p, ATTACH_PX / zoom, d.from ?? undefined) : null
         setConnectTo(hit?.id ?? null)
         patch(id, (it) => {
           if (it.type === 'arrow') {
@@ -818,6 +1008,9 @@ export function Canvas(props: CanvasProps) {
         })
         break
       }
+      case 'draft':
+        updateDraft(snapP(p))
+        break
       case 'marquee': {
         if (!d.moved && Math.hypot(p.x - d.start.x, p.y - d.start.y) * zoom < 3) return
         d.moved = true
@@ -837,9 +1030,12 @@ export function Canvas(props: CanvasProps) {
 
   const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
     const d = drag.current
-    drag.current = null
     const stage = stageRef.current
     if (stage?.hasPointerCapture(e.pointerId)) stage.releasePointerCapture(e.pointerId)
+    // A shape being drawn corner by corner survives the pointer coming up.
+    if (d?.kind === 'draft') return
+    drag.current = null
+    setGuides({ v: [], h: [] })
     if (!d) return
     if (d.kind === 'marquee') setMarquee(null)
     setConnectTo(null)
@@ -890,6 +1086,7 @@ export function Canvas(props: CanvasProps) {
             width={W}
             height={H}
             viewBox={`0 0 ${doc.width} ${doc.height}`}
+            filter={colorVision === 'normal' ? undefined : 'url(#colour-vision)'}
             role="img"
             aria-label={t('Figure board, {w} by {h}', { w: doc.width, h: doc.height })}
           >
@@ -902,15 +1099,46 @@ export function Canvas(props: CanvasProps) {
                 <rect width="8" height="8" fill="#E3EAEE" />
                 <rect x="8" y="8" width="8" height="8" fill="#E3EAEE" />
               </pattern>
+              {colorVision !== 'normal' && (
+                <filter id="colour-vision" colorInterpolationFilters="linearRGB">
+                  <feColorMatrix type="matrix" values={COLOR_VISION[colorVision].values} />
+                </filter>
+              )}
             </defs>
             <rect width={doc.width} height={doc.height} fill={doc.transparent ? 'url(#checker)' : doc.background} />
             {showGrid && zoom >= 0.5 && (
               <rect width={doc.width} height={doc.height} fill="url(#dots)" pointerEvents="none" />
             )}
             <g>
-              {doc.items.map((it) => (it.hidden ? null : <ItemView key={it.id} item={it} zoom={zoom} v={iconsV} />))}
+              {doc.items.map((it) => (it.hidden ? null : <ItemView key={it.id} item={it} zoom={zoom} v={iconsV} doc={doc} />))}
             </g>
             <Overlay items={selected} zoom={zoom} />
+            {(guides.v.length > 0 || guides.h.length > 0) && (
+              <g pointerEvents="none">
+                {guides.v.map((g, i) => (
+                  <line
+                    key={`v${i}`}
+                    className="guide"
+                    x1={g.at}
+                    y1={g.from}
+                    x2={g.at}
+                    y2={g.to}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
+                {guides.h.map((g, i) => (
+                  <line
+                    key={`h${i}`}
+                    className="guide"
+                    x1={g.from}
+                    y1={g.at}
+                    x2={g.to}
+                    y2={g.at}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
+              </g>
+            )}
             {connectTo && (() => {
               const target = doc.items.find((i) => i.id === connectTo)
               return target ? <ConnectHighlight item={target} zoom={zoom} /> : null

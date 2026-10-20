@@ -15,7 +15,9 @@ for f in root.glob('*.ts*'):
     for m in re.finditer(r"\bt\(\s*\w+\s*\?\s*'((?:[^'\\]|\\.)*)'\s*:\s*'((?:[^'\\]|\\.)*)'", txt):
         keys.update([m.group(1), m.group(2)])
     # keys held in data tables
-    for m in re.finditer(r"label: '((?:[^'\\]|\\.)*)'", txt): keys.add(m.group(1))
+    # names held in data tables; an empty one is data, not a string to translate
+    for m in re.finditer(r"(?:label|hint): '((?:[^'\\]|\\.)*)'", txt):
+        if m.group(1): keys.add(m.group(1))
     for m in re.finditer(r"^\s*\['([A-Z][a-z]+)', '", txt, re.M): keys.add(m.group(1))
 cats = {i['category'] for i in json.loads((root / 'icons.json').read_text())['icons']}
 for extra in ('icons.bioart.json', 'icons.commons.json', 'icons.phylopic.json', 'icons.healthicons.json'):

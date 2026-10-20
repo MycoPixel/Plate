@@ -1,6 +1,7 @@
 import { emptyDoc, uid } from './defaults'
 import { syncConnectors } from './connectors'
-import type { Anchor, Doc, Item } from './types'
+import { syncMarkers } from './markers'
+import type { Anchor, ChartKind, Doc, Item } from './types'
 
 const KEY = 'plate:doc:v1'
 
@@ -70,19 +71,31 @@ function sanitizeItem(raw: unknown): Item | null {
         source: typeof raw.source === 'string' && raw.source ? raw.source.slice(0, 500) : undefined,
       }
     }
-    case 'shape':
+    case 'shape': {
+      const shape = oneOf(raw.shape, ['rect', 'ellipse', 'bracket', 'brace', 'callout', 'poly', 'path'] as const, 'rect')
+      // Corners are fractions of the box, so they may sit outside 0..1 without being wrong.
+      const points = Array.isArray(raw.points)
+        ? raw.points
+            .filter((p): p is [number, number] => Array.isArray(p) && p.length === 2 && p.every((v) => typeof v === 'number' && Number.isFinite(v)))
+            .slice(0, 512)
+            .map(([fx, fy]) => [Math.max(-4, Math.min(4, fx)), Math.max(-4, Math.min(4, fy))] as [number, number])
+        : undefined
       return {
         ...flags,
         ...box,
         type: 'shape',
         id,
-        shape: oneOf(raw.shape, ['rect', 'ellipse'] as const, 'rect'),
+        shape,
         fill: str(raw.fill, '#DCE7EE'),
         stroke: str(raw.stroke, '#13262F'),
         strokeWidth: Math.max(0, num(raw.strokeWidth, 2)),
         opacity: Math.min(1, Math.max(0, num(raw.opacity, 1))),
         radius: Math.max(0, num(raw.radius, 0)),
+        flipX: raw.flipX === true ? true : undefined,
+        points: shape === 'poly' || shape === 'path' ? points : undefined,
+        smooth: raw.smooth === true ? true : undefined,
       }
+    }
     case 'text':
       return {
         ...flags,
@@ -98,6 +111,53 @@ function sanitizeItem(raw: unknown): Item | null {
         italic: bool(raw.italic, false),
         align: oneOf(raw.align, ['left', 'center', 'right'] as const, 'left'),
         font: oneOf(raw.font, ['sans', 'serif', 'mono'] as const, 'sans'),
+        legend: raw.legend === true ? true : undefined,
+      }
+    case 'chart': {
+      const oneOfKind = (v: unknown): ChartKind =>
+        v === 'bar' || v === 'line' || v === 'scatter' ? v : 'bar'
+      const series = Array.isArray(raw.series)
+        ? raw.series
+            .filter((s): s is Record<string, unknown> => isObj(s))
+            .slice(0, 8)
+            .map((s) => ({
+              name: str(s.name, '').slice(0, 40) || 'Series',
+              color: str(s.color, '#2F6F8F'),
+              values: (Array.isArray(s.values) ? s.values.slice(0, 60).map((v) => num(v, 0)).filter(Number.isFinite) : []).slice(0, 60),
+              errors: Array.isArray(s.errors) ? s.errors.slice(0, 60).map((v) => Math.max(0, num(v, 0))).filter(Number.isFinite) : undefined,
+            }))
+            .filter((s) => s.values.length > 0)
+        : []
+      return {
+        ...flags,
+        ...box,
+        type: 'chart',
+        id,
+        opacity: Math.min(1, Math.max(0, num(raw.opacity, 1))),
+        title: str(raw.title, '').slice(0, 80),
+        yLabel: str(raw.yLabel, '').slice(0, 60),
+        xLabel: str(raw.xLabel, '').slice(0, 60),
+        xNames: (Array.isArray(raw.xNames) ? raw.xNames.map((w) => str(w, '').slice(0, 24)).filter((w) => w) : []).slice(0, 60),
+        series: series.length ? series : [{ name: 'Series', color: '#2F6F8F', values: [1] }],
+        kind: oneOfKind(raw.kind),
+        yMax: Math.max(0, num(raw.yMax, 0)),
+        showGrid: bool(raw.showGrid, true),
+      }
+    }
+    case 'marker':
+      return {
+        ...flags,
+        type: 'marker',
+        id,
+        x: box.x,
+        y: box.y,
+        size: Math.min(400, Math.max(8, num(raw.size, 34))),
+        label: str(raw.label, '').slice(0, 160),
+        fill: str(raw.fill, '#463C9B'),
+        stroke: str(raw.stroke, '#FFFFFF'),
+        strokeWidth: Math.max(0, num(raw.strokeWidth, 2)),
+        textFill: str(raw.textFill, '#FFFFFF'),
+        fontSize: Math.max(4, num(raw.fontSize, 18)),
       }
     case 'membrane': {
       const iconId = str(raw.iconId, '')
@@ -157,14 +217,14 @@ export function sanitizeDoc(raw: unknown): Doc | null {
   if (!isObj(raw) || !Array.isArray(raw.items)) return null
   const base = emptyDoc()
   const items = raw.items.map(sanitizeItem).filter((i): i is Item => i !== null)
-  return syncConnectors({
+  return syncMarkers(syncConnectors({
     title: str(raw.title, base.title).slice(0, 120),
     width: Math.min(8000, Math.max(100, num(raw.width, base.width))),
     height: Math.min(8000, Math.max(100, num(raw.height, base.height))),
     background: str(raw.background, base.background),
     transparent: bool(raw.transparent, false),
     items,
-  })
+  }))
 }
 
 export const serializeProject = (doc: Doc) =>

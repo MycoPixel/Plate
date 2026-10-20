@@ -1,8 +1,10 @@
+import { CHART_COLORS } from './charts'
 import { measureText } from './geometry'
 import { t } from './i18n'
 import { ICON_BY_ID } from './icons'
 import { DEFAULT_LIPID } from './membrane'
-import type { ArrowItem, Doc, IconItem, IconMeta, ImageItem, Item, MembraneItem, Pt, ShapeItem, TextItem } from './types'
+import { defaultPoints } from './shapes'
+import type { ArrowItem, ChartItem, Doc, IconItem, IconMeta, ImageItem, Item, MarkerItem, MembraneItem, Pt, ShapeItem, TextItem } from './types'
 
 export const uid = () => Math.random().toString(36).slice(2, 9)
 
@@ -59,7 +61,7 @@ export const newText = (at: Pt, text = t('Text'), fontSize = 24): TextItem => ({
   align: 'left',
 })
 
-export const newShape = (shape: 'rect' | 'ellipse', at: Pt): ShapeItem => ({
+export const newShape = (shape: ShapeItem['shape'], at: Pt): ShapeItem => ({
   type: 'shape',
   id: uid(),
   shape,
@@ -68,11 +70,49 @@ export const newShape = (shape: 'rect' | 'ellipse', at: Pt): ShapeItem => ({
   w: 1,
   h: 1,
   rotation: 0,
-  fill: '#DCE7EE',
+  fill: shape === 'bracket' || shape === 'brace' || shape === 'path' ? 'none' : '#DCE7EE',
   stroke: INK,
   strokeWidth: 2,
   opacity: 1,
   radius: 0,
+  ...(shape === 'poly' || shape === 'path' ? { points: defaultPoints(shape), smooth: shape === 'path' } : null),
+})
+
+/** A plain line is an arrow with no head, so it attaches to items and exports like any other. */
+export const newLine = (at: Pt): ArrowItem => ({ ...newArrow(at), head: 'none' })
+
+export const newMarker = (at: Pt): MarkerItem => ({
+  type: 'marker',
+  id: uid(),
+  x: at.x,
+  y: at.y,
+  size: 34,
+  label: '',
+  fill: '#463C9B',
+  stroke: '#FFFFFF',
+  strokeWidth: 2,
+  textFill: '#FFFFFF',
+  fontSize: 18,
+})
+
+/** A chart with one series and three categories, ready to be filled in from Properties. */
+export const newChart = (center: Pt, w = 380, h = 300): ChartItem => ({
+  type: 'chart',
+  id: uid(),
+  x: center.x - w / 2,
+  y: center.y - h / 2,
+  w,
+  h,
+  rotation: 0,
+  opacity: 1,
+  title: '',
+  yLabel: t('Signal'),
+  xLabel: '',
+  xNames: ['A', 'B', 'C'],
+  series: [{ name: t('Series 1'), color: CHART_COLORS[0], values: [3, 5, 4] }],
+  kind: 'bar',
+  yMax: 0,
+  showGrid: true,
 })
 
 export const newArrow = (at: Pt): ArrowItem => ({

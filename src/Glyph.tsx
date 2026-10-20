@@ -206,6 +206,84 @@ const PATHS = {
       <path d="M4 8h13l-3.5-3.5M20 16H7l3.5 3.5" />
     </>
   ),
+  distH: (
+    <>
+      <path d="M4 4v16M20 4v16" />
+      <rect x="10" y="9" width="4" height="6" rx="1" />
+    </>
+  ),
+  distV: (
+    <>
+      <path d="M4 4h16M4 20h16" />
+      <rect x="9" y="10" width="6" height="4" rx="1" />
+    </>
+  ),
+  boardL: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" />
+      <path d="M7 8v8" />
+      <rect x="9" y="9.5" width="7" height="5" rx="1" />
+    </>
+  ),
+  boardC: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" />
+      <path d="M12 7v10" />
+      <rect x="8.5" y="9" width="7" height="6" rx="1" />
+    </>
+  ),
+  boardR: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" />
+      <path d="M17 8v8" />
+      <rect x="8" y="9.5" width="7" height="5" rx="1" />
+    </>
+  ),
+  boardT: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" />
+      <path d="M8 7h8" />
+      <rect x="9.5" y="9" width="5" height="7" rx="1" />
+    </>
+  ),
+  boardM: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" />
+      <path d="M7 12h10" />
+      <rect x="9" y="8.5" width="6" height="7" rx="1" />
+    </>
+  ),
+  boardB: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" />
+      <path d="M8 17h8" />
+      <rect x="9.5" y="8" width="5" height="7" rx="1" />
+    </>
+  ),
+  zoomSel: (
+    <>
+      <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+      <circle cx="14" cy="11" r="3.4" />
+      <path d="M16.6 13.6L20 17" />
+    </>
+  ),
+  line: <path d="M4.5 19.5L19.5 4.5" />,
+  bracket: <path d="M10 4H6.5v16H10M6.5 12H4" />,
+  brace: <path d="M10 4H7c-1.5 2.5-1.5 4 0 8-1.5 4-1.5 5.5 0 8h3" />,
+  callout: (
+    <>
+      <path d="M4 5.5h16v10H10l-4.5 4v-4H4z" />
+    </>
+  ),
+  poly: <path d="M12 3.5l8.5 6.2-3.2 10H6.7l-3.2-10z" />,
+  path: <path d="M3.5 18c4.5 0 5-12 8.5-12s4 12 8.5 12" />,
+  more: (
+    <>
+      <circle cx="6" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="18" cy="12" r="1.4" fill="currentColor" stroke="none" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>
 
 export type GlyphName = keyof typeof PATHS

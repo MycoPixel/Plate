@@ -1,7 +1,10 @@
 import { creditsText, wrapLines } from './credits'
 import { arrowParts, boxOf, FIGURE_FONT, fontFamily, iconLayout, lineSpans, measureText, r3, transformAttr, unionAabb } from './geometry'
 import { getIcon, ensureIcons, ICON_BY_ID, iconDataUri, iconIdOf, resolveColors, scopeIds } from './icons'
+import { chartEls } from './charts'
 import { lipidTransform, membraneLayout } from './membrane'
+import { markerNumber } from './markers'
+import { shapeEls } from './shapes'
 import type { Doc, Item, Rect } from './types'
 import { t } from './i18n'
 
@@ -14,7 +17,7 @@ const attrs = (o: Record<string, string | number | undefined>) =>
     .map(([k, v]) => ` ${k}="${typeof v === 'string' ? esc(v) : v}"`)
     .join('')
 
-function itemSvg(item: Item): string {
+function itemSvg(item: Item, doc: Doc): string {
   switch (item.type) {
     case 'icon': {
       const meta = ICON_BY_ID.get(item.iconId)
@@ -47,15 +50,42 @@ function itemSvg(item: Item): string {
       )
     case 'shape': {
       const common = {
-        fill: item.fill,
-        stroke: item.strokeWidth > 0 ? item.stroke : 'none',
-        'stroke-width': item.strokeWidth > 0 ? item.strokeWidth : undefined,
         opacity: item.opacity < 1 ? item.opacity : undefined,
         transform: transformAttr(item),
       }
-      return item.shape === 'rect'
-        ? `<rect${attrs({ x: r3(item.x), y: r3(item.y), width: r3(item.w), height: r3(item.h), rx: item.radius || undefined, ...common })}/>`
-        : `<ellipse${attrs({ cx: r3(item.x + item.w / 2), cy: r3(item.y + item.h / 2), rx: r3(item.w / 2), ry: r3(item.h / 2), ...common })}/>`
+      return shapeEls(item)
+        .map((el) =>
+          el.kind === 'rect'
+            ? `<rect${attrs({ x: r3(el.x), y: r3(el.y), width: r3(el.w), height: r3(el.h), rx: el.rx || undefined, fill: el.fill, stroke: el.stroke, 'stroke-width': el.strokeWidth || undefined, ...common })}/>`
+            : el.kind === 'ellipse'
+              ? `<ellipse${attrs({ cx: r3(el.cx), cy: r3(el.cy), rx: r3(el.rx), ry: r3(el.ry), fill: el.fill, stroke: el.stroke, 'stroke-width': el.strokeWidth || undefined, ...common })}/>`
+              : `<path${attrs({ d: el.d, fill: el.fill, stroke: el.stroke, 'stroke-width': el.strokeWidth || undefined, ...common })}/>`,
+        )
+        .join('')
+    }
+    case 'marker':
+      return (
+        `<circle${attrs({ cx: r3(item.x), cy: r3(item.y), r: r3(item.size / 2), fill: item.fill, stroke: item.strokeWidth > 0 ? item.stroke : undefined, 'stroke-width': item.strokeWidth || undefined })}/>` +
+        `<text${attrs({ x: r3(item.x), y: r3(item.y), 'font-family': FIGURE_FONT, 'font-size': r3(item.fontSize), 'font-weight': 700, fill: item.textFill, 'text-anchor': 'middle', 'dominant-baseline': 'central' })}>${markerNumber(doc, item.id)}</text>`
+      )
+    case 'chart': {
+      const common = { opacity: item.opacity < 1 ? item.opacity : undefined, transform: transformAttr(item) }
+      return chartEls(item)
+        .map((el) => {
+          if (el.kind === 'rect')
+            return `<rect${attrs({ x: r3(el.x), y: r3(el.y), width: r3(el.w), height: r3(el.h), rx: el.rx || undefined, fill: el.fill, stroke: el.stroke, 'stroke-width': el.strokeWidth || undefined, ...common })}/>`
+          if (el.kind === 'line')
+            return `<line${attrs({ x1: r3(el.x1), y1: r3(el.y1), x2: r3(el.x2), y2: r3(el.y2), stroke: el.stroke, 'stroke-width': el.strokeWidth || undefined, 'stroke-dasharray': el.dash, ...common })}/>`
+          if (el.kind === 'circle')
+            return `<circle${attrs({ cx: r3(el.cx), cy: r3(el.cy), r: r3(el.r), fill: el.fill, stroke: el.stroke, 'stroke-width': el.strokeWidth || undefined, ...common })}/>`
+          if (el.kind === 'path')
+            return `<path${attrs({ d: el.d, fill: el.fill, stroke: el.stroke, 'stroke-width': el.strokeWidth || undefined, ...common })}/>`
+          const pos = el.rotate
+            ? `translate(${r3(item.x)} ${r3(item.y)}) rotate(${r3(el.rotate)} ${r3(el.x)} ${r3(el.y)})`
+            : attrs({ transform: transformAttr(item) })
+          return `<text${attrs({ x: r3(el.x), y: r3(el.y), 'font-family': FIGURE_FONT, 'font-size': r3(el.size), fill: el.fill, 'text-anchor': el.anchor, ...(el.rotate ? { transform: pos } : { transform: transformAttr(item), opacity: item.opacity < 1 ? item.opacity : undefined }) })}>${esc(el.text)}</text>`
+        })
+        .join('')
     }
     case 'text': {
       const m = measureText(item)
@@ -154,7 +184,7 @@ export async function buildSvg(doc: Doc, withCredits: boolean, opts: SvgOptions 
   if (!doc.transparent) parts.push(`<rect x="${region.x}" y="${region.y}" width="${W}" height="${H}" fill="${esc(doc.background)}"/>`)
   parts.push(`<clipPath id="board"><rect x="${region.x}" y="${region.y}" width="${region.w}" height="${region.h}"/></clipPath>`)
   parts.push('<g clip-path="url(#board)">')
-  for (const it of visible) parts.push(itemSvg(it))
+  for (const it of visible) parts.push(itemSvg(it, doc))
   parts.push('</g>')
   if (lines.length) {
     parts.push(`<g font-family="${FIGURE_FONT}" font-size="${fs}" fill="#4A5B64">`)

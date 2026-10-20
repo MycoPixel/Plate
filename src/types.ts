@@ -58,16 +58,24 @@ export type ImageItem = Flags &
     source?: string
   }
 
+export type ShapeKind = 'rect' | 'ellipse' | 'bracket' | 'brace' | 'callout' | 'poly' | 'path'
+
 export type ShapeItem = Flags &
   Box & {
     type: 'shape'
     id: string
-    shape: 'rect' | 'ellipse'
+    shape: ShapeKind
     fill: string
     stroke: string
     strokeWidth: number
     opacity: number
     radius: number
+    /** bracket, brace and callout: which way it faces. */
+    flipX?: boolean
+    /** poly and path: corners as fractions of the box, so resizing and rotating carry them along. */
+    points?: [number, number][]
+    /** path only: a smooth curve through the points rather than straight segments. */
+    smooth?: boolean
   }
 
 export type TextItem = Flags & {
@@ -84,6 +92,8 @@ export type TextItem = Flags & {
   align: 'left' | 'center' | 'right'
   /** Missing means sans-serif (Arial), so older figures keep working. */
   font?: FontId
+  /** A legend is written for you from the markers on the board, so its text is not yours to edit. */
+  legend?: boolean
 }
 
 /** Where one end of an arrow is attached: an item on the board, and optionally a fixed side of it. */
@@ -144,7 +154,55 @@ export type MembraneItem = Flags & {
   colors?: Record<string, string>
 }
 
-export type Item = IconItem | ImageItem | ShapeItem | TextItem | ArrowItem | MembraneItem
+export type ChartKind = 'bar' | 'line' | 'scatter'
+
+export type ChartSeries = {
+  name: string
+  color: string
+  /** One value per category. */
+  values: number[]
+  /** Optional error bars, same length as values. */
+  errors?: number[]
+}
+
+export type ChartItem = Flags &
+  Box & {
+    type: 'chart'
+    id: string
+    opacity: number
+    title: string
+    yLabel: string
+    xLabel: string
+    /** Category names under the bars or along the x axis. */
+    xNames: string[]
+    series: ChartSeries[]
+    kind: ChartKind
+    /** Optional fixed top of the y axis; 0 or missing means fit the data. */
+    yMax: number
+    showGrid: boolean
+  }
+
+export type Item = IconItem | ImageItem | ShapeItem | TextItem | ArrowItem | MembraneItem | MarkerItem | ChartItem
+
+/**
+ * A numbered marker on the figure, for a caption that refers back to "1", "2", "3". The number is
+ * not stored: it follows the marker's place in reading order, so the legend always matches.
+ */
+export type MarkerItem = Flags & {
+  type: 'marker'
+  id: string
+  x: number
+  y: number
+  /** Diameter of the circle. */
+  size: number
+  /** What this marker points at. The legend is built from these. */
+  label: string
+  fill: string
+  stroke: string
+  strokeWidth: number
+  textFill: string
+  fontSize: number
+}
 
 export type Doc = {
   title: string
@@ -155,6 +213,21 @@ export type Doc = {
   items: Item[]
 }
 
-export type Tool = 'select' | 'text' | 'arrow' | 'rect' | 'ellipse' | 'membrane'
+/** View-only colour filters, for checking a figure the way a colourblind reader sees it. */
+export type ColorVision = 'normal' | 'deuteranopia' | 'protanopia'
+
+export type Tool =
+  | 'select'
+  | 'text'
+  | 'arrow'
+  | 'rect'
+  | 'ellipse'
+  | 'membrane'
+  | 'line'
+  | 'bracket'
+  | 'brace'
+  | 'callout'
+  | 'poly'
+  | 'path'
 export type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 export type Rect = { x: number; y: number; w: number; h: number }

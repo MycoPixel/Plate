@@ -6,11 +6,17 @@ import { Glyph } from './Glyph'
 import type { GlyphName } from './Glyph'
 import { iconLabel, t, useLang } from './i18n'
 import { getIcon, ICON_BY_ID, ICONS, iconUrl, useIconCacheVersion } from './icons'
+import { markerNumber } from './markers'
 import { membraneLayout } from './membrane'
-import type { Anchor, Doc, FontId, ImageItem, IconMeta, Item, MembraneItem } from './types'
+import type { Anchor, ChartItem, ChartSeries, Doc, FontId, ImageItem, IconMeta, Item, MembraneItem, ShapeItem } from './types'
 import { round2 } from './util'
 
 export type Align = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
+/** What an arrange button does: line items up with each other, with the board, or space them evenly. */
+export type ArrangeOp =
+  | { kind: 'align'; to: Align }
+  | { kind: 'board'; to: Align }
+  | { kind: 'distribute'; axis: 'h' | 'v' }
 export type Order = 'front' | 'forward' | 'backward' | 'back'
 
 type Props = {
@@ -22,7 +28,9 @@ type Props = {
   onDuplicate: () => void
   onDelete: () => void
   onOrder: (o: Order) => void
-  onAlign: (a: Align) => void
+  onArrange: (a: ArrangeOp) => void
+  onZoomSelection: () => void
+  onFit: () => void
   onSelect: (ids: string[], additive: boolean) => void
   onToggle: (id: string, flag: 'hidden' | 'locked') => void
   onGroup: () => void
@@ -136,20 +144,37 @@ function IconBtn({
   )
 }
 
-const nameOf = (it: Item) => {
+const SHAPE_NAMES: Record<ShapeItem['shape'], string> = {
+  rect: 'Rectangle',
+  ellipse: 'Ellipse',
+  bracket: 'Bracket',
+  brace: 'Brace',
+  callout: 'Callout',
+  poly: 'Polygon',
+  path: 'Curve',
+}
+
+function nameOf(it: Item, doc?: Doc): string {
   switch (it.type) {
     case 'icon':
       { const m = ICON_BY_ID.get(it.iconId); return m ? iconLabel(m) : t('Icon') }
     case 'text':
+      if (it.legend) return t('Marker legend')
       return it.text.split('\n')[0].slice(0, 28) || t('Text')
     case 'image':
       return it.smiles ? t('Structure') : (it.name ?? t('Image'))
     case 'membrane':
       return t('Membrane')
+    case 'marker': {
+      const n = doc ? markerNumber(doc, it.id) : 1
+      return it.label.trim() ? `${n}  ${it.label.trim()}` : `${n}  ${t('Marker')}`
+    }
     case 'arrow':
-      return it.kind === 'elbow' ? t('Elbow arrow') : it.kind === 'curve' ? t('Curved arrow') : t('Arrow')
+      return it.head === 'none' ? t('Line') : it.kind === 'elbow' ? t('Elbow arrow') : it.kind === 'curve' ? t('Curved arrow') : t('Arrow')
     case 'shape':
-      return it.shape === 'rect' ? t('Rectangle') : t('Ellipse')
+      return t(SHAPE_NAMES[it.shape])
+    case 'chart':
+      return it.title.trim() || t('Chart')
   }
 }
 
@@ -180,17 +205,17 @@ function Layers({ doc, selected, onSelect, onToggle }: Pick<Props, 'doc' | 'sele
                   ) : (
                     <Glyph name={glyph} size={16} />
                   )}
-                  <span>{nameOf(it)}</span>
+                  <span>{nameOf(it, doc)}</span>
                   {it.group && <Glyph name="group" size={13} />}
                 </button>
                 <IconBtn
                   icon={it.hidden ? 'eyeOff' : 'eye'}
-                  label={t(it.hidden ? 'Show {name}' : 'Hide {name}', { name: nameOf(it) })}
+                  label={t(it.hidden ? 'Show {name}' : 'Hide {name}', { name: nameOf(it, doc) })}
                   onClick={() => onToggle(it.id, 'hidden')}
                 />
                 <IconBtn
                   icon={it.locked ? 'lock' : 'unlock'}
-                  label={t(it.locked ? 'Unlock {name}' : 'Lock {name}', { name: nameOf(it) })}
+                  label={t(it.locked ? 'Unlock {name}' : 'Lock {name}', { name: nameOf(it, doc) })}
                   onClick={() => onToggle(it.id, 'locked')}
                 />
               </li>
@@ -205,6 +230,110 @@ function Layers({ doc, selected, onSelect, onToggle }: Pick<Props, 'doc' | 'sele
 const LIPIDS = ICONS.filter((m) => m.category === 'Cell membrane' && /lipid/.test(m.id))
 
 /** Settings of a membrane: which lipid, how many layers, and how tightly and evenly they are packed. */
+/** The data behind a chart: series names, colours, values and error bars. */
+function ChartSection({
+  item,
+  onSet,
+}: {
+  item: ChartItem
+  onSet: (p: Record<string, unknown>, f: string) => void
+}) {
+  const series = item.series
+  const setSeries = (next: ChartSeries[], f: string) => onSet({ series: next }, f)
+  const edit = (si: number, p: Partial<ChartSeries>) => {
+    const next = series.slice()
+    next[si] = { ...next[si], ...p }
+    setSeries(next, 'cs')
+  }
+  const numbers = (txt: string) =>
+    txt
+      .split(/[,\s]+/)
+      .map((w) => w.trim())
+      .filter((w) => w.length > 0)
+      .map((w) => Number(w))
+  return (
+    <Section title={t('Data')}>
+      <label className="field wide">
+        <span>{t('Chart type')}</span>
+        <select value={item.kind} onChange={(e) => onSet({ kind: e.target.value }, 'ckind')}>
+          <option value="bar">{t('Bar chart')}</option>
+          <option value="line">{t('Line graph')}</option>
+          <option value="scatter">{t('Scatter plot')}</option>
+        </select>
+      </label>
+      <div className="grid2">
+        <label className="field wide">
+          <span>{t('Title')}</span>
+          <input value={item.title} maxLength={80} onChange={(e) => onSet({ title: e.target.value }, 'ctitle')} />
+        </label>
+        <label className="field wide">
+          <span>{t('Top of y axis, 0 for auto')}</span>
+          <input type="number" min={0} value={item.yMax} onChange={(e) => onSet({ yMax: Math.max(0, e.target.valueAsNumber || 0) }, 'cymax')} />
+        </label>
+        <label className="field wide">
+          <span>{t('Y axis label')}</span>
+          <input value={item.yLabel} maxLength={60} onChange={(e) => onSet({ yLabel: e.target.value }, 'cylab')} />
+        </label>
+        <label className="field wide">
+          <span>{t('X axis label')}</span>
+          <input value={item.xLabel} maxLength={60} onChange={(e) => onSet({ xLabel: e.target.value }, 'cxlab')} />
+        </label>
+      </div>
+      <label className="field wide">
+        <span>{t('Categories, separated by commas')}</span>
+        <input
+          value={item.xNames.join(', ')}
+          onChange={(e) => onSet({ xNames: e.target.value.split(',').map((w) => w.trim()).filter((w) => w) }, 'cxn')}
+        />
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={item.showGrid} onChange={(e) => onSet({ showGrid: e.target.checked }, 'cgrid')} />
+        <span>{t('Show grid lines')}</span>
+      </label>
+      {series.map((sr, si) => (
+        <div key={si} className="chart-series">
+          <div className="color-row">
+            <input type="color" aria-label={t('Series colour')} value={sr.color} onChange={(e) => edit(si, { color: e.target.value })} />
+            <input
+              type="text"
+              aria-label={t('Series name')}
+              value={sr.name}
+              maxLength={40}
+              onChange={(e) => edit(si, { name: e.target.value })}
+            />
+          </div>
+          <label className="field wide">
+            <span>{t('Values, in category order')}</span>
+            <textarea
+              rows={2}
+              className="mono"
+              value={sr.values.map((v) => String(v)).join(', ')}
+              onChange={(e) => {
+                const vals = numbers(e.target.value)
+                edit(si, { values: vals })
+              }}
+            />
+          </label>
+          <label className="field wide">
+            <span>{t('Error bars, leave blank for none')}</span>
+            <textarea
+              rows={1}
+              className="mono"
+              value={(sr.errors ?? []).map((v) => String(v)).join(', ')}
+              onChange={(e) => {
+                const errs = numbers(e.target.value)
+                const short = errs.slice(0, sr.values.length)
+                while (short.length < sr.values.length) short.push(0)
+                edit(si, { errors: short.some((v) => v > 0) ? short : undefined })
+              }}
+            />
+          </label>
+        </div>
+      ))}
+    </Section>
+  )
+}
+
 function MembraneSection({
   item,
   meta,
@@ -253,7 +382,7 @@ function MembraneSection({
       </div>
       {pct(t('Spacing'), item.spacing, 50, 200, 'mspacing', 'spacing')}
       {pct(t('Irregularity'), item.jitter, 0, 100, 'mjitter', 'jitter')}
-      {pct(t('Curve'), item.bend, -150, 150, 'mbend', 'bend')}
+      {pct(t('Bend'), item.bend, -150, 150, 'mbend', 'bend')}
       {pct(t('Opacity'), item.opacity, 5, 100, 'mop', 'opacity')}
       <div className="btn-row">
         {item.layers === 1 && (
@@ -310,7 +439,7 @@ function EndConnection({
   return (
     <div className="conn-row">
       <label className="field">
-        <span>{t('{end}: attached to {name}', { end: label, name: nameOf(target) })}</span>
+        <span>{t('{end}: attached to {name}', { end: label, name: nameOf(target, doc) })}</span>
         <select
           value={anchor.side ?? 'auto'}
           onChange={(e) => onChange(e.target.value === 'auto' ? { id: anchor.id } : { id: anchor.id, side: e.target.value as NonNullable<Anchor['side']> })}
@@ -417,7 +546,20 @@ export function Inspector(props: Props) {
         <IconBtn icon="forward" label={t('Bring forward')} onClick={() => props.onOrder('forward')} />
         <IconBtn icon="backward" label={t('Send backward')} onClick={() => props.onOrder('backward')} />
         <IconBtn icon="back" label={t('Send to back')} onClick={() => props.onOrder('back')} />
-        <span className="spacer" />
+      </div>
+      <div className="btn-row">
+        <IconBtn icon="boardL" label={t('Align to the left edge of the board')} onClick={() => props.onArrange({ kind: 'board', to: 'left' })} />
+        <IconBtn icon="boardC" label={t('Centre on the board')} onClick={() => props.onArrange({ kind: 'board', to: 'center' })} />
+        <IconBtn icon="boardR" label={t('Align to the right edge of the board')} onClick={() => props.onArrange({ kind: 'board', to: 'right' })} />
+        <IconBtn icon="boardT" label={t('Align to the top edge of the board')} onClick={() => props.onArrange({ kind: 'board', to: 'top' })} />
+        <IconBtn icon="boardM" label={t('Centre vertically on the board')} onClick={() => props.onArrange({ kind: 'board', to: 'middle' })} />
+        <IconBtn icon="boardB" label={t('Align to the bottom edge of the board')} onClick={() => props.onArrange({ kind: 'board', to: 'bottom' })} />
+      </div>
+      <div className="btn-row">
+        <IconBtn icon="zoomSel" label={t('Zoom to the selection')} onClick={props.onZoomSelection} />
+        <IconBtn icon="fit" label={t('Fit the whole board')} onClick={() => props.onFit()} />
+      </div>
+      <div className="btn-row">
         <IconBtn icon="group" label={t('Group (Ctrl+G)')} disabled={selected.length < 2} onClick={props.onGroup} />
         <IconBtn icon="ungroup" label={t('Ungroup (Ctrl+Shift+G)')} disabled={!selected.some((i) => i.group)} onClick={props.onUngroup} />
         <IconBtn icon="copy" label={t('Duplicate')} onClick={props.onDuplicate} />
@@ -464,12 +606,17 @@ export function Inspector(props: Props) {
       <>
         <Section title={t('{n} items selected', { n: selected.length })}>
           <div className="btn-row">
-            <IconBtn icon="alignL" label={t('Align left edges')} onClick={() => props.onAlign('left')} />
-            <IconBtn icon="alignC" label={t('Align horizontal centres')} onClick={() => props.onAlign('center')} />
-            <IconBtn icon="alignR" label={t('Align right edges')} onClick={() => props.onAlign('right')} />
-            <IconBtn icon="alignT" label={t('Align top edges')} onClick={() => props.onAlign('top')} />
-            <IconBtn icon="alignM" label={t('Align vertical centres')} onClick={() => props.onAlign('middle')} />
-            <IconBtn icon="alignB" label={t('Align bottom edges')} onClick={() => props.onAlign('bottom')} />
+            <IconBtn icon="alignL" label={t('Align left edges')} disabled={selected.length < 2} onClick={() => props.onArrange({ kind: 'align', to: 'left' })} />
+            <IconBtn icon="alignC" label={t('Align horizontal centres')} disabled={selected.length < 2} onClick={() => props.onArrange({ kind: 'align', to: 'center' })} />
+            <IconBtn icon="alignR" label={t('Align right edges')} disabled={selected.length < 2} onClick={() => props.onArrange({ kind: 'align', to: 'right' })} />
+            <IconBtn icon="alignT" label={t('Align top edges')} disabled={selected.length < 2} onClick={() => props.onArrange({ kind: 'align', to: 'top' })} />
+            <IconBtn icon="alignM" label={t('Align vertical centres')} disabled={selected.length < 2} onClick={() => props.onArrange({ kind: 'align', to: 'middle' })} />
+            <IconBtn icon="alignB" label={t('Align bottom edges')} disabled={selected.length < 2} onClick={() => props.onArrange({ kind: 'align', to: 'bottom' })} />
+          </div>
+          <div className="btn-row">
+            <IconBtn icon="distH" label={t('Distribute horizontally')} disabled={selected.length < 3} onClick={() => props.onArrange({ kind: 'distribute', axis: 'h' })} />
+            <IconBtn icon="distV" label={t('Distribute vertically')} disabled={selected.length < 3} onClick={() => props.onArrange({ kind: 'distribute', axis: 'v' })} />
+            <span className="note small">{t('Equal spacing')}</span>
           </div>
           <div className="btn-row">
             <IconBtn icon="minus" label={t('Make selection 10% smaller')} onClick={() => props.onScale(0.9)} />
@@ -487,7 +634,7 @@ export function Inspector(props: Props) {
     const palette = loaded?.status === 'ready' ? loaded.palette : []
     body = (
       <>
-        <Section title={nameOf(one)}>
+        <Section title={nameOf(one, doc)}>
           {one.type === 'arrow' || one.type === 'membrane' ? (
             <div className="grid2">
               <Num label={t('Start X')} value={one.x1} onChange={(n) => set({ x1: n }, 'x1')} />
@@ -499,13 +646,19 @@ export function Inspector(props: Props) {
             <div className="grid2">
               <Num label={t('X')} value={one.x} onChange={(n) => set({ x: n }, 'x')} />
               <Num label={t('Y')} value={one.y} onChange={(n) => set({ y: n }, 'y')} />
-              {one.type !== 'text' && (
-                <>
-                  <Num label={t('Width')} value={one.w} min={1} onChange={(n) => set({ w: Math.max(1, n) }, 'w')} />
-                  <Num label={t('Height')} value={one.h} min={1} onChange={(n) => set({ h: Math.max(1, n) }, 'h')} />
-                </>
+              {one.type === 'marker' ? (
+                <Num label={t('Diameter')} value={one.size} min={8} onChange={(n) => set({ size: Math.max(8, n) }, 'sz')} />
+              ) : (
+                one.type !== 'text' && (
+                  <>
+                    <Num label={t('Width')} value={one.w} min={1} onChange={(n) => set({ w: Math.max(1, n) }, 'w')} />
+                    <Num label={t('Height')} value={one.h} min={1} onChange={(n) => set({ h: Math.max(1, n) }, 'h')} />
+                  </>
+                )
               )}
-              <Num label={t('Rotation')} value={one.rotation} step={5} onChange={(n) => set({ rotation: n }, 'r')} />
+              {one.type !== 'marker' && (
+                <Num label={t('Rotation')} value={one.rotation} step={5} onChange={(n) => set({ rotation: n }, 'r')} />
+              )}
             </div>
           )}
         </Section>
@@ -638,14 +791,40 @@ export function Inspector(props: Props) {
 
         {one.type === 'shape' && (
           <Section title={t('Style')}>
-            <Color label={t('Fill')} value={one.fill} allowNone onChange={(c) => set({ fill: c }, 'fill')} />
+            {(one.shape === 'rect' || one.shape === 'callout') && (
+              <Color label={t('Fill')} value={one.fill} allowNone onChange={(c) => set({ fill: c }, 'fill')} />
+            )}
             <Color label={t('Outline')} value={one.stroke} onChange={(c) => set({ stroke: c }, 'stroke')} />
             <div className="grid2">
               <Num label={t('Outline width')} value={one.strokeWidth} min={0} step={0.5} onChange={(n) => set({ strokeWidth: Math.max(0, n) }, 'sw')} />
-              {one.shape === 'rect' && (
+              {(one.shape === 'rect' || one.shape === 'callout') && (
                 <Num label={t('Corner radius')} value={one.radius} min={0} onChange={(n) => set({ radius: Math.max(0, n) }, 'rad')} />
               )}
             </div>
+            {(one.shape === 'bracket' || one.shape === 'brace' || one.shape === 'callout') && (
+              <div className="btn-row">
+                <IconBtn
+                  icon="flip"
+                  label={one.flipX ? t('Face the other way') : t('Flip horizontally')}
+                  pressed={one.flipX}
+                  onClick={() => set({ flipX: !one.flipX }, 'ffx')}
+                />
+                <span className="note small">{t('Direction')}</span>
+              </div>
+            )}
+            {one.shape === 'path' && (
+              <label className="check">
+                <input type="checkbox" checked={!!one.smooth} onChange={(e) => set({ smooth: e.target.checked }, 'sm')} />
+                <span>{t('Smooth curve')}</span>
+              </label>
+            )}
+            {(one.shape === 'poly' || one.shape === 'path') && one.points && (
+              <p className="note small">
+                {t('{n} corners. Drag the handles to move the shape; the corners keep their proportions.', {
+                  n: one.points.length,
+                })}
+              </p>
+            )}
             <label className="field wide">
               <span>{t('Opacity')}</span>
               <input
@@ -656,6 +835,36 @@ export function Inspector(props: Props) {
                 onChange={(e) => set({ opacity: Number(e.target.value) / 100 }, 'op')}
               />
             </label>
+          </Section>
+        )}
+
+        {one.type === 'chart' && <ChartSection item={one} onSet={set} />}
+
+        {one.type === 'marker' && (
+          <Section title={t('Marker')}>
+            <label className="field wide">
+              <span>{t('Number')}</span>
+              <input value={markerNumber(doc, one.id)} readOnly aria-label={t('Number')} />
+            </label>
+            <p className="note small">
+              {t('Markers are numbered in reading order, top to bottom and then left to right, so moving one renumbers the rest to match.')}
+            </p>
+            <label className="field wide">
+              <span>{t('What this points at')}</span>
+              <input
+                value={one.label}
+                placeholder={t('Apoptosis')}
+                aria-label={t('What this points at')}
+                onChange={(e) => set({ label: e.target.value }, 'mlabel')}
+              />
+            </label>
+            <Color label={t('Fill')} value={one.fill} onChange={(c) => set({ fill: c }, 'mfill')} />
+            <Color label={t('Text')} value={one.textFill} onChange={(c) => set({ textFill: c }, 'mtext')} />
+            <Color label={t('Outline')} value={one.stroke} onChange={(c) => set({ stroke: c }, 'mstroke')} />
+            <div className="grid2">
+              <Num label={t('Outline width')} value={one.strokeWidth} min={0} step={0.5} onChange={(n) => set({ strokeWidth: Math.max(0, n) }, 'msw')} />
+              <Num label={t('Text size')} value={one.fontSize} min={4} onChange={(n) => set({ fontSize: Math.max(4, n) }, 'mfs')} />
+            </div>
           </Section>
         )}
 
@@ -721,7 +930,7 @@ export function Inspector(props: Props) {
             </div>
             {one.kind === 'curve' && (
               <label className="field wide">
-                <span>{t('Curve')}</span>
+                <span>{t('Bend')}</span>
                 <input
                   type="range"
                   min={-100}

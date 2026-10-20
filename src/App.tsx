@@ -2,13 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from './Canvas'
 import { creditedImages, usedIcons } from './credits'
 import { CreditsDialog } from './CreditsDialog'
-import { emptyDoc, exampleDoc, INK, newIcon, newImage, newShape, newText, uid } from './defaults'
+import { FigureDialog } from './FigureDialog'
+import { emptyDoc, exampleDoc, INK, newChart, newIcon, newImage, newMarker, newShape, newText, uid } from './defaults'
 import { canPaste, copyItems, pasteCopies, setClipboardVerified } from './clipboard'
+import { ChartDialog } from './ChartDialog'
 import { remapAnchors, syncConnectors } from './connectors'
 import { buildSvg, copyPng, download, exportLayout, fileSlug, printPdf, renderPng } from './export'
 import { ExportDialog } from './ExportDialog'
 import type { ExportRequest } from './ExportDialog'
-import { aabbOf, measureText, scaleItem, translateItem, unionAabb } from './geometry'
+import { aabbOf, distributeBoxes, measureText, scaleItem, translateItem, unionAabb } from './geometry'
+import { GeneratorDialog } from './GeneratorDialog'
+import type { GeneratorKind, GeneratorRequest } from './GeneratorDialog'
+import { gelLanes, wellPlate, PLATE_PRESETS } from './generators'
 import { Glyph } from './Glyph'
 import type { GlyphName } from './Glyph'
 import { useHistory } from './history'
@@ -16,16 +21,20 @@ import { ensureIcons, ICON_BY_ID, iconIdOf } from './icons'
 import { getLang, LANGS, setLang, t, useLang } from './i18n'
 import { importImageFile } from './images'
 import { pushRecent } from './library'
+import { hasMarkers, newLegend, syncMarkers } from './markers'
 import { Inspector } from './Inspector'
-import type { Align, Order } from './Inspector'
+import type { ArrangeOp, Order } from './Inspector'
 import { Menu, MenuItem } from './Menu'
 import { Palette } from './Palette'
 import { ReplaceIconDialog } from './ReplaceIconDialog'
 import { renderSmiles } from './structure'
 import type { StructureImage } from './structure'
 import { StructureDialog } from './StructureDialog'
-import { loadAutosave, parseProject, saveAutosave, serializeProject } from './project'
-import type { Doc, Item, Pt, Tool } from './types'
+import { TemplateDialog } from './TemplateDialog'
+import type { Template } from './templates'
+import { parseProject, serializeProject } from './project'
+import { getFigure, hasLocalFigure, latestFigure, markLocalFigureMigrated, putFigure, readLocalFigure, updateFigure } from './store'
+import type { ChartKind, ChartSeries, ColorVision, Doc, Item, Pt, Tool } from './types'
 import { clamp, isTextEntry } from './util'
 import './App.css'
 
@@ -53,6 +62,12 @@ const TOOLS: { id: Tool; icon: GlyphName; label: string; key: string }[] = [
   { id: 'rect', icon: 'rect', label: 'Rectangle', key: 'R' },
   { id: 'ellipse', icon: 'ellipse', label: 'Ellipse', key: 'E' },
   { id: 'membrane', icon: 'membrane', label: 'Membrane', key: 'M' },
+  { id: 'line', icon: 'line', label: 'Line', key: 'L' },
+  { id: 'bracket', icon: 'bracket', label: 'Bracket', key: 'B' },
+  { id: 'brace', icon: 'brace', label: 'Brace', key: 'C' },
+  { id: 'callout', icon: 'callout', label: 'Callout', key: 'O' },
+  { id: 'poly', icon: 'poly', label: 'Polygon', key: 'P' },
+  { id: 'path', icon: 'path', label: 'Curve', key: 'N' },
 ]
 
 const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
@@ -68,17 +83,22 @@ function Logo() {
 
 export default function App() {
   const lang = useLang()
-  const initial = useMemo(() => loadAutosave() ?? emptyDoc(), [])
-  const { doc, set: setHistory, checkpoint, undo, redo, canUndo, canRedo } = useHistory<Doc>(initial)
+  const initial = useMemo(() => emptyDoc(), [])
+  const { doc, set: setHistory, reset, checkpoint, undo, redo, canUndo, canRedo } = useHistory<Doc>(initial)
+  const [figId, setFigId] = useState<string | null>(null)
+  const [booted, setBooted] = useState(false)
+  const [galleryOpen, setGalleryOpen] = useState(false)
   // Every change goes through here, so arrows attached to items always follow them.
   const set = useCallback(
-    (fn: (d: Doc) => Doc, record?: boolean, key?: string) => setHistory((d) => syncConnectors(fn(d)), record, key),
+    (fn: (d: Doc) => Doc, record?: boolean, key?: string) => setHistory((d) => syncConnectors(syncMarkers(fn(d))), record, key),
     [setHistory],
   )
   const [selection, setSelection] = useState<string[]>([])
   const [tool, setTool] = useState<Tool>('select')
+  const [showMoreTools, setShowMoreTools] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [fitTick, setFitTick] = useState(0)
+  const [zoomSelTick, setZoomSelTick] = useState(0)
   const [snap, setSnap] = useState(false)
   const [showGrid, setShowGrid] = useState(true)
   const [withCredits, setWithCredits] = useState(true)
@@ -89,11 +109,45 @@ export default function App() {
   const [focusTextTick, setFocusTextTick] = useState(0)
   const [structureOpen, setStructureOpen] = useState(false)
   const [replaceOpen, setReplaceOpen] = useState(false)
+  const [templateOpen, setTemplateOpen] = useState(false)
+  const [chartOpen, setChartOpen] = useState(false)
+  const [generatorOpen, setGeneratorOpen] = useState<GeneratorKind | null>(null)
+  const [colorVision, setColorVision] = useState<ColorVision>('normal')
   const [exportOpen, setExportOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const imageRef = useRef<HTMLInputElement>(null)
   const saveWarned = useRef(false)
   const toastTimer = useRef<number | undefined>(undefined)
+
+  // Move an old localStorage figure into the store, then open the most recent one.
+  const booting = useRef(false)
+  useEffect(() => {
+    if (booting.current) return // StrictMode runs effects twice; migrate only once
+    booting.current = true
+    void (async () => {
+      try {
+        if (hasLocalFigure()) {
+          const local = readLocalFigure()
+          if (local) await putFigure(local)
+          markLocalFigureMigrated()
+        }
+        const latest = await latestFigure()
+        if (latest) {
+          reset(latest.doc)
+          setFigId(latest.id)
+        } else {
+          reset(readLocalFigure() ?? emptyDoc())
+          setFigId(null)
+        }
+      } catch {
+        reset(readLocalFigure() ?? emptyDoc())
+        setFigId(null)
+      } finally {
+        setBooted(true)
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const selectedItems = useMemo(() => doc.items.filter((i) => selection.includes(i.id)), [doc.items, selection])
   const sel = useMemo(() => selectedItems.map((i) => i.id), [selectedItems])
@@ -108,16 +162,31 @@ export default function App() {
   useEffect(() => {
     void ensureIcons(doc.items.flatMap((i) => iconIdOf(i) ?? []))
   }, [doc.items])
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (saveAutosave(doc)) saveWarned.current = false
-      else if (!saveWarned.current) {
-        saveWarned.current = true
-        say(t('This figure is too big for the browser to keep automatically. Use File, Save project so you do not lose it.'))
+  // Writes the current figure to the store, with a thumbnail for the gallery.
+  const flush = useCallback(async () => {
+    if (!booted) return
+    try {
+      let thumb = ''
+      try {
+        thumb = (await buildSvg(doc, false)).svg
+      } catch {
+        thumb = ''
       }
-    }, 500)
+      if (figId) await updateFigure(figId, doc, thumb)
+      else setFigId(await putFigure(doc, thumb))
+    } catch {
+      if (!saveWarned.current) {
+        saveWarned.current = true
+        say(t('This browser refused to save the figure. Use File, Save project so you do not lose it.'))
+      }
+    }
+  }, [doc, figId, booted, say])
+
+  useEffect(() => {
+    if (!booted) return
+    const timer = window.setTimeout(() => void flush(), 1500)
     return () => window.clearTimeout(timer)
-  }, [doc, say])
+  }, [doc, figId, booted, flush])
   useEffect(() => {
     document.title = `${doc.title || t('Untitled figure')} – Plate`
   }, [doc.title, lang])
@@ -221,26 +290,43 @@ export default function App() {
   )
 
   const align = useCallback(
-    (a: Align) => {
-      if (selectedItems.length < 2) return
-      const boxes = new Map(selectedItems.map((it) => [it.id, aabbOf(it)]))
+    (a: ArrangeOp) => {
+      const items = selectedItems.filter((i) => !i.locked)
+      if (items.length === 0) return
+      if (a.kind === 'distribute') {
+        if (items.length < 3) return
+        const boxes = new Map(items.map((it) => [it.id, aabbOf(it)]))
+        const moves = distributeBoxes(boxes, a.axis)
+        set((d) => ({
+          ...d,
+          items: d.items.map((it) => {
+            const m = moves.get(it.id)
+            return m ? translateItem(it, m.x, m.y) : it
+          }),
+        }))
+        return
+      }
+      // Aligning to the board works on a single item; aligning items to each other needs two.
+      if (a.kind === 'align' && items.length < 2) return
+      const boxes = new Map(items.map((it) => [it.id, aabbOf(it)]))
       const all = [...boxes.values()]
-      const left = Math.min(...all.map((b) => b.x))
-      const right = Math.max(...all.map((b) => b.x + b.w))
-      const top = Math.min(...all.map((b) => b.y))
-      const bottom = Math.max(...all.map((b) => b.y + b.h))
+      const left = a.kind === 'board' ? 0 : Math.min(...all.map((b) => b.x))
+      const right = a.kind === 'board' ? doc.width : Math.max(...all.map((b) => b.x + b.w))
+      const top = a.kind === 'board' ? 0 : Math.min(...all.map((b) => b.y))
+      const bottom = a.kind === 'board' ? doc.height : Math.max(...all.map((b) => b.y + b.h))
+      const to = a.to
       set((d) => ({
         ...d,
         items: d.items.map((it) => {
           const b = boxes.get(it.id)
           if (!b) return it
-          const dx = a === 'left' ? left - b.x : a === 'right' ? right - (b.x + b.w) : a === 'center' ? (left + right) / 2 - (b.x + b.w / 2) : 0
-          const dy = a === 'top' ? top - b.y : a === 'bottom' ? bottom - (b.y + b.h) : a === 'middle' ? (top + bottom) / 2 - (b.y + b.h / 2) : 0
+          const dx = to === 'left' ? left - b.x : to === 'right' ? right - (b.x + b.w) : to === 'center' ? (left + right) / 2 - (b.x + b.w / 2) : 0
+          const dy = to === 'top' ? top - b.y : to === 'bottom' ? bottom - (b.y + b.h) : to === 'middle' ? (top + bottom) / 2 - (b.y + b.h / 2) : 0
           return translateItem(it, dx, dy)
         }),
       }))
     },
-    [selectedItems, set],
+    [selectedItems, doc.width, doc.height, set],
   )
 
   const groupSel = useCallback(() => {
@@ -283,6 +369,30 @@ export default function App() {
     setSelection([item.id])
     setTool('select')
   }, [doc.items, selectedItems, set])
+
+  const addMarker = useCallback(() => {
+    // Drop it just above the selection, or in the middle of the board, and let the reader
+    // decide where it really belongs.
+    const u = selectedItems.length ? unionAabb(selectedItems) : null
+    const at = u ? { x: u.x + u.w / 2, y: Math.max(24, u.y - 30) } : { x: doc.width / 2, y: doc.height / 2 }
+    const item = newMarker(at)
+    set((d) => ({ ...d, items: [...d.items, item] }))
+    setSelection([item.id])
+    setTool('select')
+    setPanel('right')
+    say(t('Marker added. Give it a label and the legend writes itself.'))
+  }, [selectedItems, doc.width, doc.height, set, say])
+
+  const addLegend = useCallback(() => {
+    if (!hasMarkers(doc)) return say(t('Add a numbered marker first.'))
+    const u = selectedItems.length ? unionAabb(selectedItems) : null
+    const at = { x: u ? u.x : 24, y: u ? Math.min(doc.height - 200, u.y + u.h + 40) : 24 }
+    const item = newLegend(at)
+    set((d) => ({ ...d, items: [...d.items, item] }))
+    setSelection([item.id])
+    setTool('select')
+    say(t('Legend added. It follows the markers as you move them.'))
+  }, [doc, selectedItems, set, say])
 
   const addScaleBar = useCallback(() => {
     const g = uid()
@@ -409,17 +519,98 @@ export default function App() {
   const zoomBy = useCallback((f: number) => setZoom((z) => clamp(z * f, 0.1, 4)), [])
 
   const newFigure = useCallback(() => {
-    set(() => emptyDoc())
+    const fresh = emptyDoc()
+    reset(fresh)
+    setFigId(null)
     setSelection([])
     setFitTick((n) => n + 1)
-    say(t('Started a new figure. Undo brings the previous one back.'))
-  }, [set, say])
+    say(t('Started a new figure. Find it later under File, My figures.'))
+  }, [reset, say])
+
+  const openFigure = useCallback(
+    (id: string) => {
+      void (async () => {
+        try {
+          await flush()
+          const next = await getFigure(id)
+          if (!next) {
+            say(t('That figure could not be opened.'))
+            return
+          }
+          reset(next)
+          setFigId(id)
+          setSelection([])
+          setGalleryOpen(false)
+          setFitTick((n) => n + 1)
+          say(t('“{name}” opened.', { name: next.title }))
+        } catch {
+          say(t('That figure could not be opened.'))
+        }
+      })()
+    },
+    [flush, reset, say],
+  )
+
+  const deleteFigure = useCallback(
+    (id: string) => {
+      if (id === figId) {
+        const fresh = emptyDoc()
+        reset(fresh)
+        setFigId(null)
+        setSelection([])
+      }
+      void import('./store').then((m) => m.listFigures().then(() => undefined))
+    },
+    [figId, reset],
+  )
 
   const loadExample = useCallback(() => {
     set(() => exampleDoc())
     setSelection([])
     setFitTick((n) => n + 1)
   }, [set])
+
+  const applyTemplate = useCallback(
+    (tpl: Template) => {
+      set(() => tpl.build())
+      setSelection([])
+      setTemplateOpen(false)
+      setFitTick((n) => n + 1)
+      say(t('“{name}” added. Change anything in it.', { name: tpl.label }))
+    },
+    [set, say],
+  )
+
+  const insertGenerated = useCallback(
+    (req: GeneratorRequest) => {
+      const items =
+        req.kind === 'plate'
+          ? wellPlate(PLATE_PRESETS.find((p) => p.id === req.preset) ?? PLATE_PRESETS[4], doc)
+          : gelLanes(req.options, doc)
+      set((d) => ({ ...d, items: [...d.items, ...items] }))
+      setSelection(items.map((i) => i.id))
+      setGeneratorOpen(null)
+      say(t('Added {n} items. Everything in it can be moved, repainted or deleted.', { n: items.length }))
+    },
+    [doc, set, setSelection, say],
+  )
+
+  const addChart = useCallback(
+    (series: ChartSeries[], xNames: string[], kind: ChartKind) => {
+      const c = { x: doc.width / 2, y: doc.height / 2 }
+      const item = newChart(c)
+      item.series = series
+      item.xNames = xNames
+      item.kind = kind
+      const maxV = series.flatMap((s) => s.values).reduce((m, v) => Math.max(m, v), 0)
+      if (maxV > 0) item.yMax = 0
+      set((d) => ({ ...d, items: [...d.items, item] }))
+      setSelection([item.id])
+      setChartOpen(false)
+      say(t('Chart added. Change its data in Properties.'))
+    },
+    [doc, set, setSelection, say],
+  )
 
   const saveProject = useCallback(() => {
     download(new Blob([serializeProject(doc)], { type: 'application/json' }), `${fileSlug(doc.title)}.plate.json`)
@@ -433,7 +624,13 @@ export default function App() {
       say(t('That file is not a Plate project. Choose a .plate.json file you saved from here.'))
       return
     }
-    set(() => parsed)
+    try {
+      const id = await putFigure(parsed)
+      setFigId(id)
+    } catch {
+      /* keep it in memory even if the store is unavailable */
+    }
+    reset(parsed)
     setSelection([])
     setFitTick((n) => n + 1)
     say(t('Opened “{title}”.', { title: parsed.title }))
@@ -520,6 +717,9 @@ export default function App() {
           e.preventDefault()
           fn()
         }
+        // Shift+2 zooms to the selection and Shift+1 to the whole board, as in other editors.
+        if (e.shiftKey && k === '2') return run(() => setZoomSelTick((n) => n + 1))
+        if (e.shiftKey && k === '1') return run(() => setFitTick((n) => n + 1))
         switch (k) {
           case 'z':
             return run(e.shiftKey ? redo : undo)
@@ -611,22 +811,31 @@ export default function App() {
         />
         <Menu label={t('File')} icon={<Glyph name="file" size={16} />}>
           <MenuItem onClick={newFigure}>{t('New figure')}</MenuItem>
+          <MenuItem onClick={() => setGalleryOpen(true)}>{t('My figures…')}</MenuItem>
           <MenuItem onClick={() => fileRef.current?.click()}>{t('Open project…')}</MenuItem>
           <MenuItem onClick={saveProject} hint={`${MOD}S`}>
             {t('Save project')}
           </MenuItem>
+          <MenuItem onClick={() => setTemplateOpen(true)}>{t('Start from a template…')}</MenuItem>
           <MenuItem onClick={loadExample}>{t('Load example figure')}</MenuItem>
         </Menu>
 
         <Menu label={t('Insert')} icon={<Glyph name="insert" size={16} />}>
           <MenuItem onClick={addPanelLabel}>{t('Panel label (A, B, C…)')}</MenuItem>
           <MenuItem onClick={addScaleBar}>{t('Scale bar')}</MenuItem>
+          <MenuItem onClick={addMarker}>{t('Numbered marker')}</MenuItem>
+          <MenuItem onClick={addLegend} disabled={!hasMarkers(doc)}>
+            {t('Marker legend')}
+          </MenuItem>
+          <MenuItem onClick={() => setGeneratorOpen('plate')}>{t('Well plate…')}</MenuItem>
+          <MenuItem onClick={() => setGeneratorOpen('gel')}>{t('Gel or blot…')}</MenuItem>
+          <MenuItem onClick={() => setChartOpen(true)}>{t('Chart from a table…')}</MenuItem>
           <MenuItem onClick={() => setStructureOpen(true)}>{t('Chemical structure from SMILES…')}</MenuItem>
           <MenuItem onClick={() => imageRef.current?.click()}>{t('Image or SVG…')}</MenuItem>
         </Menu>
 
         <div className="cluster tools" role="toolbar" aria-label={t('Tools')}>
-          {TOOLS.map((tl) => (
+          {TOOLS.slice(0, 6).map((tl) => (
             <button
               key={tl.id}
               type="button"
@@ -639,7 +848,42 @@ export default function App() {
               <Glyph name={tl.icon} />
             </button>
           ))}
+          <span className="tools-split" aria-hidden="true" />
+          <button
+            type="button"
+            className="icon-btn"
+            aria-pressed={showMoreTools}
+            title={t('More shapes')}
+            aria-label={t('More shapes')}
+            onClick={() => setShowMoreTools((v) => !v)}
+          >
+            <Glyph name="more" />
+          </button>
         </div>
+
+        {showMoreTools && (
+          <div className="more-tools" role="toolbar" aria-label={t('More shapes')}>
+            {TOOLS.slice(6).map((tl) => (
+              <button
+                key={tl.id}
+                type="button"
+                className="icon-btn"
+                aria-pressed={tool === tl.id}
+                title={`${t(tl.label)} (${tl.key})`}
+                aria-label={t(tl.label)}
+                onClick={() => {
+                  setTool(tl.id)
+                  setShowMoreTools(false)
+                }}
+              >
+                <Glyph name={tl.icon} />
+              </button>
+            ))}
+            <span className="note small">
+              {t('Drag a line, bracket, brace or callout across the board. Click to drop the corners of a polygon or a curve, then double-click or press Enter to finish.')}
+            </span>
+          </div>
+        )}
 
         <div className="cluster" role="group" aria-label={t('History')}>
           <button type="button" className="icon-btn" title={`${t('Undo')} (${MOD}Z)`} aria-label={t('Undo')} disabled={!canUndo} onClick={undo}>
@@ -666,6 +910,18 @@ export default function App() {
           <button type="button" className="icon-btn" aria-label={t('Show grid')} aria-pressed={showGrid} title={t('Show grid')} onClick={() => setShowGrid((v) => !v)}>
             <Glyph name="grid" />
           </button>
+          <label className="cvd" title={t('Preview the figure the way a colourblind reader sees it. Exports are not affected.')}>
+            <Glyph name="eye" size={16} />
+            <select
+              aria-label={t('Colourblind preview')}
+              value={colorVision}
+              onChange={(e) => setColorVision(e.target.value as ColorVision)}
+            >
+              <option value="normal">{t('Normal vision')}</option>
+              <option value="deuteranopia">{t('Deuteranopia')}</option>
+              <option value="protanopia">{t('Protanopia')}</option>
+            </select>
+          </label>
           <button type="button" className="icon-btn" aria-label={t('Snap to grid')} aria-pressed={snap} title={t('Snap to grid')} onClick={() => setSnap((v) => !v)}>
             <Glyph name="snap" />
           </button>
@@ -730,6 +986,8 @@ export default function App() {
             zoom={zoom}
             setZoom={setZoom}
             fitTick={fitTick}
+            zoomSelTick={zoomSelTick}
+            colorVision={colorVision}
             snap={snap}
             showGrid={showGrid}
             setSelection={setSelection}
@@ -752,7 +1010,9 @@ export default function App() {
             onDuplicate={duplicate}
             onDelete={remove}
             onOrder={order}
-            onAlign={align}
+            onArrange={align}
+            onZoomSelection={() => setZoomSelTick((n) => n + 1)}
+            onFit={() => setFitTick((n) => n + 1)}
             onSelect={selectFromLayers}
             onToggle={toggleFlag}
             onGroup={groupSel}
@@ -785,6 +1045,34 @@ export default function App() {
       />
 
       <StructureDialog open={structureOpen} onClose={() => setStructureOpen(false)} onAdd={addStructure} />
+
+      <FigureDialog
+        open={galleryOpen}
+        onClose={() => setGalleryOpen(false)}
+        onOpen={openFigure}
+        onNew={() => {
+          setGalleryOpen(false)
+          void flush()
+          newFigure()
+        }}
+        onDelete={deleteFigure}
+      />
+
+      <ChartDialog open={chartOpen} onClose={() => setChartOpen(false)} onAdd={addChart} />
+
+      <GeneratorDialog
+        open={generatorOpen !== null}
+        kind={generatorOpen ?? 'plate'}
+        onClose={() => setGeneratorOpen(null)}
+        onInsert={insertGenerated}
+      />
+
+      <TemplateDialog
+        open={templateOpen}
+        onClose={() => setTemplateOpen(false)}
+        onPick={applyTemplate}
+        dirty={doc.items.length > 0}
+      />
 
       <ReplaceIconDialog
         open={replaceOpen}
