@@ -13,8 +13,13 @@ import type { ExportRequest } from './ExportDialog'
 import { aabbOf, distributeBoxes, measureText, scaleItem, translateItem, unionAabb } from './geometry'
 import { GeneratorDialog } from './GeneratorDialog'
 import type { GeneratorRequest } from './GeneratorDialog'
-import { gelLanes, petriDish, wellPlate, PLATE_PRESETS } from './generators'
+import { gelLanes, panelGrid, petriDish, wellPlate, PLATE_PRESETS } from './generators'
+import { SequenceDialog } from './SequenceDialog'
+import { decodeShare, encodeShare } from './share'
+import { sequenceItems } from './sequences'
+import type { FastaRecord, SequenceOptions } from './sequences'
 import { Glyph } from './Glyph'
+import { HistoryDialog } from './HistoryDialog'
 import type { GlyphName } from './Glyph'
 import { useHistory } from './history'
 import { ensureIcons, ICON_BY_ID, iconIdOf } from './icons'
@@ -33,6 +38,8 @@ import { StructureDialog } from './StructureDialog'
 import { TemplateDialog } from './TemplateDialog'
 import type { Template } from './templates'
 import { parseProject, serializeProject } from './project'
+import { dropVersions, saveVersion } from './versions'
+import type { VersionMeta } from './versions'
 import { getFigure, hasLocalFigure, latestFigure, markLocalFigureMigrated, putFigure, readLocalFigure, updateFigure } from './store'
 import type { ChartKind, ChartSeries, ColorVision, Doc, Item, Pt, Tool } from './types'
 import { clamp, isTextEntry } from './util'
@@ -111,13 +118,16 @@ export default function App() {
   const [replaceOpen, setReplaceOpen] = useState(false)
   const [templateOpen, setTemplateOpen] = useState(false)
   const [chartOpen, setChartOpen] = useState(false)
-  const [generatorOpen, setGeneratorOpen] = useState<'plate' | 'gel' | 'petri' | null>(null)
+  const [sequenceOpen, setSequenceOpen] = useState(false)
+  const [generatorOpen, setGeneratorOpen] = useState<'plate' | 'gel' | 'petri' | 'panels' | null>(null)
   const [colorVision, setColorVision] = useState<ColorVision>('normal')
   const [exportOpen, setExportOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const imageRef = useRef<HTMLInputElement>(null)
   const saveWarned = useRef(false)
   const toastTimer = useRef<number | undefined>(undefined)
+  const snapRef = useRef<{ figId: string; at: number; sig: string } | null>(null)
 
   // Move an old localStorage figure into the store, then open the most recent one.
   const booting = useRef(false)
@@ -126,6 +136,13 @@ export default function App() {
     booting.current = true
     void (async () => {
       try {
+        const shared = await decodeShare(window.location.hash)
+        if (shared) {
+          reset(shared)
+          setFigId(null)
+          say(t('Opened the shared figure. It is yours to edit, and it is saved like any other.'))
+          return
+        }
         if (hasLocalFigure()) {
           const local = readLocalFigure()
           if (local) await putFigure(local)
@@ -135,6 +152,7 @@ export default function App() {
         if (latest) {
           reset(latest.doc)
           setFigId(latest.id)
+          snapRef.current = { figId: latest.id, at: Date.now(), sig: JSON.stringify(latest.doc) }
         } else {
           reset(readLocalFigure() ?? emptyDoc())
           setFigId(null)
@@ -192,6 +210,32 @@ export default function App() {
     const timer = window.setTimeout(() => void flush(), 1500)
     return () => window.clearTimeout(timer)
   }, [doc, figId, booted, flush])
+
+  // Snapshots are the undo history of a whole session: at most one every few minutes.
+  const snapshot = useCallback(async () => {
+    if (!figId) return
+    snapRef.current = { figId, at: Date.now(), sig: JSON.stringify(doc) }
+    try {
+      await saveVersion(figId, doc)
+    } catch {
+      /* version history is a convenience; the figure itself is still saved */
+    }
+  }, [doc, figId])
+
+  useEffect(() => {
+    if (!booted || !figId) return
+    const sig = JSON.stringify(doc)
+    // A figure full of photos can be many megabytes; snapshots would fill the browser's storage.
+    if (sig.length > 3_000_000) return
+    const prev = snapRef.current
+    if (prev && prev.figId === figId && prev.sig === sig) return
+    const wait = prev && prev.figId === figId ? Math.max(0, 3 * 60 * 1000 - (Date.now() - prev.at)) : 0
+    const timer = window.setTimeout(() => {
+      if (snapRef.current?.figId === figId && snapRef.current.sig === sig) return
+      void snapshot()
+    }, wait + 3000)
+    return () => window.clearTimeout(timer)
+  }, [doc, figId, booted, snapshot])
 
   // Closing or hiding the tab saves at once instead of waiting for the debounce.
   useEffect(() => {
@@ -584,6 +628,7 @@ export default function App() {
           }
           reset(next)
           setFigId(id)
+          snapRef.current = { figId: id, at: Date.now(), sig: JSON.stringify(next) }
           setSelection([])
           setGalleryOpen(false)
           setFitTick((n) => n + 1)
@@ -596,8 +641,36 @@ export default function App() {
     [flush, reset, say],
   )
 
+  const restoreVersion = useCallback(
+    (version: Doc, meta: VersionMeta) => {
+      void (async () => {
+        if (figId) {
+          try {
+            await saveVersion(figId, doc)
+          } catch {
+            /* the current state is already autosaved, so nothing is lost either way */
+          }
+        }
+        reset(version)
+        setSelection([])
+        setHistoryOpen(false)
+        setFitTick((n) => n + 1)
+        say(
+          t('Restored the version from {when}. The state it replaced is still in the history.', {
+            when: new Date(meta.at).toLocaleString(getLang() === 'es' ? 'es' : 'en', {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+            }),
+          }),
+        )
+      })()
+    },
+    [doc, figId, reset, say],
+  )
+
   const deleteFigure = useCallback(
     (id: string) => {
+      void dropVersions(id)
       if (id === figId) {
         const fresh = emptyDoc()
         reset(fresh)
@@ -632,7 +705,9 @@ export default function App() {
           ? wellPlate(PLATE_PRESETS.find((p) => p.id === req.preset) ?? PLATE_PRESETS[4], doc)
           : req.kind === 'gel'
             ? gelLanes(req.options, doc)
-            : petriDish(req.pattern, doc)
+            : req.kind === 'petri'
+              ? petriDish(req.pattern, doc)
+              : panelGrid(req.options, doc)
       set((d) => ({ ...d, items: [...d.items, ...items] }))
       setSelection(items.map((i) => i.id))
       setGeneratorOpen(null)
@@ -658,6 +733,32 @@ export default function App() {
     [doc, set, setSelection, say],
   )
 
+  const addSequences = useCallback(
+    (records: FastaRecord[], options: SequenceOptions) => {
+      const items = sequenceItems(records, options, doc)
+      set((d) => ({ ...d, items: [...d.items, ...items] }))
+      setSelection(items.map((i) => i.id))
+      setSequenceOpen(false)
+      say(t('Sequence added as text. Change its font, size or colour in Properties.'))
+    },
+    [doc, set, setSelection, say],
+  )
+
+  const shareLink = useCallback(async () => {
+    const hash = await encodeShare(doc)
+    if (!hash) {
+      say(t('This figure is too big to share as a link. Save the project file instead.'))
+      return
+    }
+    const url = window.location.origin + window.location.pathname + hash
+    try {
+      await navigator.clipboard.writeText(url)
+      say(t('Link copied. Anyone who opens it sees this figure.'))
+    } catch {
+      window.prompt(t('Copy this link'), url)
+    }
+  }, [doc, say])
+
   const saveProject = useCallback(() => {
     download(new Blob([serializeProject(doc)], { type: 'application/json' }), `${fileSlug(doc.title)}.plate.json`)
     say(t('Project saved. Open it again from File, then Open project.'))
@@ -673,6 +774,7 @@ export default function App() {
     try {
       const id = await putFigure(parsed)
       setFigId(id)
+      snapRef.current = { figId: id, at: Date.now(), sig: JSON.stringify(parsed) }
     } catch {
       /* keep it in memory even if the store is unavailable */
     }
@@ -862,6 +964,8 @@ export default function App() {
           <MenuItem onClick={saveProject} hint={`${MOD}S`}>
             {t('Save project')}
           </MenuItem>
+          <MenuItem onClick={() => void shareLink()}>{t('Copy link to this figure')}</MenuItem>
+          <MenuItem onClick={() => setHistoryOpen(true)}>{t('Version history…')}</MenuItem>
           <MenuItem onClick={() => setTemplateOpen(true)}>{t('Start from a template…')}</MenuItem>
           <MenuItem onClick={loadExample}>{t('Load example figure')}</MenuItem>
         </Menu>
@@ -876,8 +980,10 @@ export default function App() {
           <MenuItem onClick={() => setGeneratorOpen('plate')}>{t('Well plate…')}</MenuItem>
           <MenuItem onClick={() => setGeneratorOpen('gel')}>{t('Gel or blot…')}</MenuItem>
           <MenuItem onClick={() => setGeneratorOpen('petri')}>{t('Petri dish…')}</MenuItem>
+          <MenuItem onClick={() => setGeneratorOpen('panels')}>{t('Panel grid…')}</MenuItem>
           <MenuItem onClick={() => setChartOpen(true)}>{t('Chart from a table…')}</MenuItem>
           <MenuItem onClick={() => setStructureOpen(true)}>{t('Chemical structure from SMILES…')}</MenuItem>
+          <MenuItem onClick={() => setSequenceOpen(true)}>{t('Sequence from FASTA…')}</MenuItem>
           <MenuItem onClick={() => imageRef.current?.click()}>{t('Image or SVG…')}</MenuItem>
         </Menu>
 
@@ -1107,6 +1213,16 @@ export default function App() {
       />
 
       <ChartDialog open={chartOpen} onClose={() => setChartOpen(false)} onAdd={addChart} />
+
+      <SequenceDialog open={sequenceOpen} onClose={() => setSequenceOpen(false)} onAdd={addSequences} />
+
+      <HistoryDialog
+        open={historyOpen}
+        figId={figId}
+        onClose={() => setHistoryOpen(false)}
+        onSnapshot={snapshot}
+        onRestore={restoreVersion}
+      />
 
       <GeneratorDialog
         open={generatorOpen !== null}

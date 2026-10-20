@@ -14,8 +14,18 @@ export type ExportRequest = {
   dpi: number
 }
 
-type Preset = 'board' | 'nature1' | 'nature2' | 'custom'
-const PRESET_MM: Partial<Record<Preset, number>> = { nature1: 89, nature2: 183 }
+type Preset = 'board' | 'nature1' | 'nature2' | 'science1' | 'science2' | 'cell1' | 'cell2' | 'plos1' | 'plos2' | 'page' | 'custom'
+const PRESET_MM: Partial<Record<Preset, number>> = {
+  nature1: 89,
+  nature2: 183,
+  science1: 55,
+  science2: 120,
+  cell1: 85,
+  cell2: 174,
+  plos1: 83,
+  plos2: 173,
+  page: 180,
+}
 const DPIS = [72, 150, 300, 600]
 const round1 = (n: number) => Math.round(n * 10) / 10
 
@@ -103,6 +113,13 @@ export function ExportDialog({
                   <option value="board">{t('Board size at 96 dpi')}</option>
                   <option value="nature1">{t('Nature, 1 column (89 mm)')}</option>
                   <option value="nature2">{t('Nature, 2 columns (183 mm)')}</option>
+                  <option value="science1">{t('Science, 1 column (55 mm)')}</option>
+                  <option value="science2">{t('Science, 2 columns (120 mm)')}</option>
+                  <option value="cell1">{t('Cell, 1 column (85 mm)')}</option>
+                  <option value="cell2">{t('Cell, 2 columns (174 mm)')}</option>
+                  <option value="plos1">{t('PLOS, 1 column (83 mm)')}</option>
+                  <option value="plos2">{t('PLOS, 2 columns (173 mm)')}</option>
+                  <option value="page">{t('Full page (180 mm)')}</option>
                   <option value="custom">{t('Custom width')}</option>
                 </select>
               </label>

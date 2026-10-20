@@ -1,4 +1,4 @@
-import { newShape, newText } from './defaults'
+import { INK, newShape, newText } from './defaults'
 import type { Doc, Item } from './types'
 
 export type PlatePresetId = '6' | '12' | '24' | '48' | '96' | '384'
@@ -210,6 +210,59 @@ export function petriDish(pattern: PetriPattern, doc: Doc): Item[] {
       const r = 0.42 + jitter(i * 11.7) * 0.42
       const size = 4 + jitter(i * 4.3) * 9
       colony(Math.cos(a) * r, Math.sin(a) * r, size, COLONY_COLORS[(i * 2) % COLONY_COLORS.length], 0.6 + jitter(i * 8.1) * 0.35)
+    }
+  }
+  return out
+}
+
+export type PanelOptions = {
+  rows: number
+  cols: number
+  /** Space between neighbouring panels, in board units. */
+  gap: number
+  labels: 'letters' | 'numbers' | 'none'
+  frame: boolean
+}
+
+/** Letters for panel labels: A…Z, then AA, AB… past Z. */
+function panelLetter(i: number) {
+  let n = i
+  let out = ''
+  do {
+    out = String.fromCharCode(65 + (n % 26)) + out
+    n = Math.floor(n / 26) - 1
+  } while (n >= 0)
+  return out
+}
+
+/** A grid of empty panels, each with its own letter or number, ready to fill in. */
+export function panelGrid({ rows, cols, gap, labels, frame }: PanelOptions, doc: Doc): Item[] {
+  const margin = 48
+  const cellW = (doc.width - margin * 2 - gap * (cols - 1)) / cols
+  const cellH = (doc.height - margin * 2 - gap * (rows - 1)) / rows
+  const out: Item[] = []
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = margin + c * (cellW + gap)
+      const y = margin + r * (cellH + gap)
+      if (frame) {
+        out.push({
+          ...newShape('rect', { x, y }),
+          w: cellW,
+          h: cellH,
+          fill: 'none',
+          stroke: '#C9D2D8',
+          strokeWidth: 1.5,
+          radius: 4,
+        })
+      }
+      if (labels !== 'none') {
+        const i = r * cols + c
+        const label = newText({ x: x + 8, y: y + 6 }, labels === 'letters' ? panelLetter(i) : String(i + 1), 22)
+        label.bold = true
+        label.fill = INK
+        out.push(label)
+      }
     }
   }
   return out

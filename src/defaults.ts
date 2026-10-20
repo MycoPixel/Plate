@@ -17,6 +17,11 @@ export const ARTBOARDS = [
   { id: 'a4', label: 'A4 landscape, 1123 × 794', w: 1123, h: 794 },
   { id: 'square', label: 'Square, 1000 × 1000', w: 1000, h: 1000 },
   { id: 'column', label: 'Journal column, 600 × 800', w: 600, h: 800 },
+  { id: 'nature1', label: 'Nature, 1 column (89 × 120 mm)', w: 336, h: 454 },
+  { id: 'nature2', label: 'Nature, 2 columns (183 × 120 mm)', w: 692, h: 454 },
+  { id: 'science1', label: 'Science, 1 column (55 × 75 mm)', w: 208, h: 283 },
+  { id: 'cell1', label: 'Cell, 1 column (85 × 110 mm)', w: 321, h: 416 },
+  { id: 'a4page', label: 'Full page (180 × 240 mm)', w: 680, h: 907 },
 ]
 
 export const emptyDoc = (): Doc => ({
