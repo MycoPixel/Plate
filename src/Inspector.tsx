@@ -868,7 +868,7 @@ export function Inspector(props: Props) {
 
         {one.type === 'shape' && (
           <Section title={t('Style')}>
-            {(one.shape === 'rect' || one.shape === 'callout') && (
+            {(one.shape === 'rect' || one.shape === 'ellipse' || one.shape === 'callout' || one.shape === 'poly') && (
               <Color label={t('Fill')} value={one.fill} allowNone onChange={(c) => set({ fill: c }, 'fill')} />
             )}
             <Color label={t('Outline')} value={one.stroke} onChange={(c) => set({ stroke: c }, 'stroke')} />
