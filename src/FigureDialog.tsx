@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Glyph } from './Glyph'
 import { t, useLang } from './i18n'
+import { listFigures, removeFigure } from './store'
 import type { FigureMeta } from './store'
 
-const svgUrl = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+/** Thumbnails are drawn as PNGs; older ones are plain SVG. */
+const thumbUrl = (f: FigureMeta) =>
+  f.thumb.startsWith('data:image/png') ? f.thumb : `data:image/svg+xml;charset=utf-8,${encodeURIComponent(f.thumb)}`
 
 export function FigureDialog({
   open,
@@ -26,11 +29,9 @@ export function FigureDialog({
   const load = () => {
     let live = true
     setFigs(null)
-    import('./store').then((m) =>
-      m.listFigures().then((list) => {
-        if (live) setFigs(list)
-      }),
-    )
+    listFigures().then((list) => {
+      if (live) setFigs(list)
+    })
     return () => {
       live = false
     }
@@ -47,13 +48,11 @@ export function FigureDialog({
   const remove = (f: FigureMeta) => {
     if (!window.confirm(t('Delete “{name}”? This cannot be undone.', { name: f.title }))) return
     setBusyId(f.id)
-    void import('./store').then((m) =>
-      m.removeFigure(f.id).then(() => {
-        setBusyId(null)
-        load()
-        onDelete(f.id)
-      }),
-    )
+    removeFigure(f.id).then(() => {
+      setBusyId(null)
+      load()
+      onDelete(f.id)
+    })
   }
 
   return (
@@ -80,7 +79,7 @@ export function FigureDialog({
                   onClick={() => onOpen(f.id)}
                   aria-label={t('Open {name}', { name: f.title })}
                 >
-                  {f.thumb ? <img src={svgUrl(f.thumb)} alt="" /> : <Glyph name="file" size={34} />}
+                  {f.thumb ? <img src={thumbUrl(f)} alt="" /> : <Glyph name="file" size={34} />}
                 </button>
                 <span className="gallery-title">{f.title}</span>
                 <span className="note small">{new Date(f.updatedAt).toLocaleString(lang)}</span>

@@ -9,7 +9,7 @@ import { getIcon, ICON_BY_ID, ICONS, iconUrl, useIconCacheVersion } from './icon
 import { markerNumber } from './markers'
 import { membraneLayout } from './membrane'
 import type { Anchor, ChartItem, ChartSeries, Doc, FontId, ImageItem, IconMeta, Item, MembraneItem, ShapeItem } from './types'
-import { round2 } from './util'
+import { isColor, round2 } from './util'
 
 export type Align = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
 /** What an arrange button does: line items up with each other, with the board, or space them evenly. */
@@ -83,6 +83,7 @@ function Num({
 }
 
 const asHex = (c: string) => (/^#[0-9a-f]{6}$/i.test(c) ? c : '#000000')
+const safeColor = (c: string, fb: string) => (isColor(c) ? c : fb)
 
 function Color({
   label,
@@ -104,7 +105,7 @@ function Color({
           type="color"
           aria-label={label}
           value={asHex(none ? '#ffffff' : value)}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange(safeColor(e.target.value, value))}
         />
         {allowNone && (
           <button type="button" className="mini" aria-pressed={none} onClick={() => onChange(none ? '#DCE7EE' : 'none')}>
@@ -594,7 +595,7 @@ export function Inspector(props: Props) {
           <Num label={t('Width')} value={doc.width} min={100} max={8000} onChange={(n) => patchDoc({ width: n }, 'bw')} />
           <Num label={t('Height')} value={doc.height} min={100} max={8000} onChange={(n) => patchDoc({ height: n }, 'bh')} />
         </div>
-        <Color label={t('Background')} value={doc.background} onChange={(c) => patchDoc({ background: c }, 'bg')} />
+        <Color label={t('Background')} value={doc.background} onChange={(c) => patchDoc({ background: safeColor(c, doc.background) }, 'bg')} />
         <label className="check">
           <input type="checkbox" checked={doc.transparent} onChange={(e) => patchDoc({ transparent: e.target.checked })} />
           <span>{t('Transparent background when exporting')}</span>

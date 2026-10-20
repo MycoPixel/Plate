@@ -550,4 +550,6 @@ export const ES: Record<string, string> = {
   'This browser refused to save the figure. Use File, Save project so you do not lose it.': 'Este navegador se negó a guardar la figura. Usa Archivo, Guardar proyecto para no perderla.',
   'Delete {name}': 'Eliminar {name}',
   'Delete “{name}”? This cannot be undone.': '¿Eliminar “{name}”? No se puede deshacer.',
+
+  'Could not draw a thumbnail.': 'No se pudo dibujar una miniatura.'
 }

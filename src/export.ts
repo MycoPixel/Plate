@@ -25,7 +25,7 @@ function itemSvg(item: Item, doc: Doc): string {
       if (!meta || parsed?.status !== 'ready') return ''
       const l = iconLayout(item, meta.viewBox)
       const op = item.opacity < 1 ? item.opacity : undefined
-      const open = `<g id="icon-${item.id}"${attrs({ transform: l.outer, opacity: op })}>`
+      const open = `<g id="icon-${esc(item.id)}"${attrs({ transform: l.outer, opacity: op })}>`
       if (!parsed.inline) {
         return `${open}<image${attrs({
           x: r3(item.x),
@@ -36,16 +36,16 @@ function itemSvg(item: Item, doc: Doc): string {
           'xlink:href': iconDataUri(item.iconId, parsed, item.colors),
         })}/></g>`
       }
-      const clipId = `clip-${item.id}`
+      const clipId = `clip-${esc(item.id)}`
       return (
         `${open}<g transform="${l.inner}" clip-path="url(#${clipId})">` +
         `<clipPath id="${clipId}"><rect${attrs({ x: l.clip.x, y: l.clip.y, width: l.clip.w, height: l.clip.h })}/></clipPath>` +
-        `${scopeIds(resolveColors(parsed.inner, parsed.palette, item.colors), item.id)}</g></g>`
+        `${scopeIds(resolveColors(parsed.inner, parsed.palette, item.colors), esc(item.id))}</g></g>`
       )
     }
     case 'image':
       return (
-        `<g id="image-${item.id}"${attrs({ transform: transformAttr(item, item.flipX), opacity: item.opacity < 1 ? item.opacity : undefined })}>` +
+        `<g id="image-${esc(item.id)}"${attrs({ transform: transformAttr(item, item.flipX), opacity: item.opacity < 1 ? item.opacity : undefined })}>` +
         `<image${attrs({ x: r3(item.x), y: r3(item.y), width: r3(item.w), height: r3(item.h), preserveAspectRatio: 'none', 'xlink:href': item.src })}/></g>`
       )
     case 'shape': {
@@ -122,16 +122,16 @@ function itemSvg(item: Item, doc: Doc): string {
       if (!meta || parsed?.status !== 'ready') return ''
       const layout = membraneLayout(item)
       if (!layout.lipids.length) return ''
-      const lid = `lipid-${item.id}`
+      const lid = `lipid-${esc(item.id)}`
       const [vx, vy, vw, vh] = meta.viewBox
       // The lipid is drawn once, in a 1 by 1 box, and every copy is a <use> of it.
       const def = parsed.inline
         ? `<g id="${lid}" transform="scale(${+(1 / vw).toPrecision(9)} ${+(1 / vh).toPrecision(9)}) translate(${r3(-vx)} ${r3(-vy)})" clip-path="url(#clip-${lid})">` +
           `<clipPath id="clip-${lid}"><rect${attrs({ x: vx, y: vy, width: vw, height: vh })}/></clipPath>` +
-          `${scopeIds(resolveColors(parsed.inner, parsed.palette, item.colors), item.id)}</g>`
+          `${scopeIds(resolveColors(parsed.inner, parsed.palette, item.colors), esc(item.id))}</g>`
         : `<image id="${lid}" x="0" y="0" width="1" height="1" preserveAspectRatio="none" xlink:href="${iconDataUri(item.iconId, parsed, item.colors)}"/>`
       const uses = layout.lipids.map((l) => `<use xlink:href="#${lid}" transform="${lipidTransform(l)}"/>`).join('')
-      return `<g id="membrane-${item.id}"${attrs({ opacity: item.opacity < 1 ? item.opacity : undefined })}><defs>${def}</defs>${uses}</g>`
+      return `<g id="membrane-${esc(item.id)}"${attrs({ opacity: item.opacity < 1 ? item.opacity : undefined })}><defs>${def}</defs>${uses}</g>`
     }
     case 'arrow': {
       const { d, heads } = arrowParts(item)
@@ -195,6 +195,34 @@ export async function buildSvg(doc: Doc, withCredits: boolean, opts: SvgOptions 
   }
   parts.push('</svg>')
   return { svg: parts.join(''), width: W, height: H }
+}
+
+/** A small PNG of the board for the My figures gallery. Empty when it cannot be drawn. */
+export async function thumbOf(doc: Doc, maxW = 320): Promise<string> {
+  try {
+    const { svg, width, height } = await buildSvg(doc, false)
+    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }))
+    try {
+      const img = await new Promise<HTMLImageElement>((res, rej) => {
+        const i = new Image()
+        i.onload = () => res(i)
+        i.onerror = () => rej(new Error(t('Could not draw a thumbnail.')))
+        i.src = url
+      })
+      const scale = Math.min(1, maxW / Math.max(1, width))
+      const c = document.createElement('canvas')
+      c.width = Math.max(1, Math.round(width * scale))
+      c.height = Math.max(1, Math.round(height * scale))
+      const ctx = c.getContext('2d')
+      if (!ctx) return ''
+      ctx.drawImage(img, 0, 0, c.width, c.height)
+      return c.toDataURL('image/png')
+    } finally {
+      URL.revokeObjectURL(url)
+    }
+  } catch {
+    return ''
+  }
 }
 
 const MAX_PX = 8000
@@ -301,6 +329,8 @@ export async function printPdf(doc: Doc, withCredits: boolean, widthMm: number, 
   const h = r3((widthMm * height) / width)
   const frame = document.createElement('iframe')
   frame.setAttribute('aria-hidden', 'true')
+  // Scripts are blocked, but the page stays same-origin so it can still lay out and print.
+  frame.setAttribute('sandbox', 'allow-same-origin allow-modals')
   frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1200px;height:900px;border:0;'
   frame.srcdoc =
     `<!doctype html><html><head><meta charset="utf-8"><title>${esc(doc.title)}</title><style>` +

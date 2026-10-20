@@ -1,6 +1,8 @@
 import { emptyDoc, uid } from './defaults'
 import { syncConnectors } from './connectors'
+import { isColor } from './util'
 import { syncMarkers } from './markers'
+import { remapAnchors } from './connectors'
 import type { Anchor, ChartKind, Doc, Item } from './types'
 
 const KEY = 'plate:doc:v1'
@@ -22,9 +24,14 @@ function colorMap(v: unknown): Record<string, string> | undefined {
   return Object.keys(out).length ? out : undefined
 }
 
+/** Keeps a colour field a plain hex (or "none"), never a url(...) that would fetch. */
+function color(v: string, fb: string) {
+  return isColor(v) ? v : fb
+}
+
 function sanitizeItem(raw: unknown): Item | null {
   if (!isObj(raw)) return null
-  const id = str(raw.id, '') || uid()
+  const id = str(raw.id, '').replace(/[^\w-]/g, '').slice(0, 40) || uid()
   const flags = {
     hidden: bool(raw.hidden, false) || undefined,
     locked: bool(raw.locked, false) || undefined,
@@ -86,8 +93,8 @@ function sanitizeItem(raw: unknown): Item | null {
         type: 'shape',
         id,
         shape,
-        fill: str(raw.fill, '#DCE7EE'),
-        stroke: str(raw.stroke, '#13262F'),
+        fill: color(str(raw.fill, '#DCE7EE'), '#DCE7EE'),
+        stroke: color(str(raw.stroke, '#13262F'), '#13262F'),
         strokeWidth: Math.max(0, num(raw.strokeWidth, 2)),
         opacity: Math.min(1, Math.max(0, num(raw.opacity, 1))),
         radius: Math.max(0, num(raw.radius, 0)),
@@ -106,7 +113,7 @@ function sanitizeItem(raw: unknown): Item | null {
         rotation: box.rotation,
         text: str(raw.text, 'Text'),
         fontSize: Math.max(4, num(raw.fontSize, 24)),
-        fill: str(raw.fill, '#13262F'),
+        fill: color(str(raw.fill, '#13262F'), '#13262F'),
         bold: bool(raw.bold, false),
         italic: bool(raw.italic, false),
         align: oneOf(raw.align, ['left', 'center', 'right'] as const, 'left'),
@@ -153,10 +160,10 @@ function sanitizeItem(raw: unknown): Item | null {
         y: box.y,
         size: Math.min(400, Math.max(8, num(raw.size, 34))),
         label: str(raw.label, '').slice(0, 160),
-        fill: str(raw.fill, '#463C9B'),
-        stroke: str(raw.stroke, '#FFFFFF'),
+        fill: color(str(raw.fill, '#463C9B'), '#463C9B'),
+        stroke: color(str(raw.stroke, '#FFFFFF'), '#FFFFFF'),
         strokeWidth: Math.max(0, num(raw.strokeWidth, 2)),
-        textFill: str(raw.textFill, '#FFFFFF'),
+        textFill: color(str(raw.textFill, '#FFFFFF'), '#FFFFFF'),
         fontSize: Math.max(4, num(raw.fontSize, 18)),
       }
     case 'membrane': {
@@ -192,7 +199,7 @@ function sanitizeItem(raw: unknown): Item | null {
         y1: num(raw.y1, 0),
         x2: num(raw.x2, 100),
         y2: num(raw.y2, 0),
-        stroke: str(raw.stroke, '#13262F'),
+        stroke: color(str(raw.stroke, '#13262F'), '#13262F'),
         strokeWidth: Math.max(0.5, num(raw.strokeWidth, 3)),
         head: oneOf(raw.head, ['end', 'both', 'none'] as const, 'end'),
         dashed: bool(raw.dashed, false),
@@ -216,14 +223,27 @@ function anchorOf(v: unknown): Anchor | undefined {
 export function sanitizeDoc(raw: unknown): Doc | null {
   if (!isObj(raw) || !Array.isArray(raw.items)) return null
   const base = emptyDoc()
-  const items = raw.items.map(sanitizeItem).filter((i): i is Item => i !== null)
+  const clean = raw.items.map(sanitizeItem).filter((i): i is Item => i !== null)
+  // A crafted or hand-edited file can repeat an id; give the later copy a fresh one.
+  const seen = new Set<string>()
+  const idMap = new Map<string, string>()
+  const items = clean.map((i) => {
+    if (!seen.has(i.id)) {
+      seen.add(i.id)
+      return i
+    }
+    const nid = uid()
+    idMap.set(i.id, nid)
+    return { ...i, id: nid }
+  })
+  const remapped = idMap.size ? remapAnchors(items, idMap) : items
   return syncMarkers(syncConnectors({
     title: str(raw.title, base.title).slice(0, 120),
     width: Math.min(8000, Math.max(100, num(raw.width, base.width))),
     height: Math.min(8000, Math.max(100, num(raw.height, base.height))),
     background: str(raw.background, base.background),
     transparent: bool(raw.transparent, false),
-    items,
+    items: remapped,
   }))
 }
 

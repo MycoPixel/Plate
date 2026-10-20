@@ -1,4 +1,5 @@
 import { uid } from './defaults'
+import { sanitizeDoc } from './project'
 import type { Doc } from './types'
 
 export type FigureMeta = {
@@ -63,7 +64,8 @@ export async function updateFigure(id: string, doc: Doc, thumb?: string): Promis
 export async function getFigure(id: string): Promise<Doc | null> {
   const s = await store('readonly')
   const row = await req(s.get(id)) as Row | undefined
-  return row ? row.doc : null
+  // Stored rows are our own, but a hand-edited DB or a schema change should not crash the app.
+  return row ? sanitizeDoc(row.doc) : null
 }
 
 export async function removeFigure(id: string): Promise<void> {
@@ -119,8 +121,8 @@ function parseLocal(text: string): Doc | null {
     const data: unknown = JSON.parse(text)
     if (!data || typeof data !== 'object') return null
     const inner = (data as Record<string, unknown>).doc
-    if (inner && typeof inner === 'object' && 'items' in (inner as Record<string, unknown>)) return inner as Doc
-    if ('items' in (data as Record<string, unknown>)) return data as Doc
+    const doc = inner && typeof inner === 'object' && 'items' in (inner as Record<string, unknown>) ? inner : data
+    return sanitizeDoc(doc)
   } catch {
     /* not JSON */
   }

@@ -7,7 +7,7 @@ import { emptyDoc, exampleDoc, INK, newChart, newIcon, newImage, newMarker, newS
 import { canPaste, copyItems, pasteCopies, setClipboardVerified } from './clipboard'
 import { ChartDialog } from './ChartDialog'
 import { remapAnchors, syncConnectors } from './connectors'
-import { buildSvg, copyPng, download, exportLayout, fileSlug, printPdf, renderPng } from './export'
+import { buildSvg, copyPng, download, exportLayout, fileSlug, printPdf, renderPng, thumbOf } from './export'
 import { ExportDialog } from './ExportDialog'
 import type { ExportRequest } from './ExportDialog'
 import { aabbOf, distributeBoxes, measureText, scaleItem, translateItem, unionAabb } from './geometry'
@@ -162,13 +162,16 @@ export default function App() {
   useEffect(() => {
     void ensureIcons(doc.items.flatMap((i) => iconIdOf(i) ?? []))
   }, [doc.items])
-  // Writes the current figure to the store, with a thumbnail for the gallery.
+  // Writes the current figure to the store, with a thumbnail for the gallery. Serialized, so a
+  // second save cannot start while the first is still fetching icons for its thumbnail.
+  const saving = useRef(false)
   const flush = useCallback(async () => {
-    if (!booted) return
+    if (!booted || saving.current) return
+    saving.current = true
     try {
       let thumb = ''
       try {
-        thumb = (await buildSvg(doc, false)).svg
+        thumb = await thumbOf(doc)
       } catch {
         thumb = ''
       }
@@ -179,6 +182,8 @@ export default function App() {
         saveWarned.current = true
         say(t('This browser refused to save the figure. Use File, Save project so you do not lose it.'))
       }
+    } finally {
+      saving.current = false
     }
   }, [doc, figId, booted, say])
 
@@ -187,6 +192,21 @@ export default function App() {
     const timer = window.setTimeout(() => void flush(), 1500)
     return () => window.clearTimeout(timer)
   }, [doc, figId, booted, flush])
+
+  // Closing or hiding the tab saves at once instead of waiting for the debounce.
+  useEffect(() => {
+    if (!booted) return
+    const onHide = () => {
+      if (document.visibilityState === 'visible') return
+      void flush()
+    }
+    window.addEventListener('visibilitychange', onHide)
+    window.addEventListener('pagehide', () => void flush())
+    return () => {
+      window.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', () => void flush())
+    }
+  }, [booted, flush])
   useEffect(() => {
     document.title = `${doc.title || t('Untitled figure')} – Plate`
   }, [doc.title, lang])
@@ -559,7 +579,6 @@ export default function App() {
         setFigId(null)
         setSelection([])
       }
-      void import('./store').then((m) => m.listFigures().then(() => undefined))
     },
     [figId, reset],
   )

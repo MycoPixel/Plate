@@ -12,3 +12,6 @@ export function isFormTarget(t: EventTarget | null) {
 }
 
 export const round2 = (n: number) => Math.round(n * 100) / 100
+
+/** Keeps colours to plain hex (or "none"), so a url(...) value cannot make the board fetch anything. */
+export const isColor = (c: string) => c === 'none' || /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(c)
