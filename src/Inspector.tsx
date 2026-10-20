@@ -26,6 +26,7 @@ type Props = {
   patch: (ids: string[], p: Record<string, unknown>, key?: string) => void
   patchDoc: (p: Partial<Doc>, key?: string) => void
   onDuplicate: () => void
+  onRepeat: (count: number, dx: number, dy: number) => void
   onDelete: () => void
   onOrder: (o: Order) => void
   onArrange: (a: ArrangeOp) => void
@@ -38,6 +39,28 @@ type Props = {
   onScale: (factor: number) => void
   onRedrawStructure: (id: string, smiles: string, color: boolean) => Promise<boolean>
   onReplaceIcon: () => void
+}
+
+function RepeatSection({ onRepeat }: { onRepeat: (count: number, dx: number, dy: number) => void }) {
+  const [n, setN] = useState(3)
+  const [dx, setDx] = useState(48)
+  const [dy, setDy] = useState(48)
+  return (
+    <Section title={t('Repeat')}>
+      <div className="grid2">
+        <Num label={t('Copies')} value={n} min={1} max={50} onChange={(v) => setN(Math.round(v))} />
+        <Num label={t('Step X')} value={dx} onChange={setDx} />
+        <Num label={t('Step Y')} value={dy} onChange={setDy} />
+      </div>
+      <button
+        type="button"
+        className="mini"
+        onClick={() => onRepeat(Math.max(1, Math.min(50, Math.round(n))), dx, dy)}
+      >
+        {t('Add copies')}
+      </button>
+    </Section>
+  )
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -228,6 +251,45 @@ function Layers({ doc, selected, onSelect, onToggle }: Pick<Props, 'doc' | 'sele
   )
 }
 
+/** The rest of the icon's colours, behind a toggle so the most used ones stay prominent. */
+function MoreColours({
+  palette,
+  colors,
+  set,
+}: {
+  palette: string[]
+  colors: Record<string, string> | undefined
+  set: (p: Record<string, unknown>, f: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rest = palette.slice(12)
+  return (
+    <div className="more-colours">
+      <button type="button" className="mini" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        {open ? t('Fewer colours') : t('{n} more colours', { n: rest.length })}
+      </button>
+      {open && (
+        <div className="swatches">
+          {rest.map((orig) => (
+            <input
+              key={orig}
+              type="color"
+              aria-label={t('Recolour {hex}', { hex: orig })}
+              title={orig}
+              value={colors?.[orig] ?? orig}
+              onChange={(e) => {
+                const next = { ...(colors ?? {}), [orig]: e.target.value }
+                if (e.target.value.toLowerCase() === orig) delete next[orig]
+                set({ colors: Object.keys(next).length ? next : undefined }, `col:${orig}`)
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const LIPIDS = ICONS.filter((m) => m.category === 'Cell membrane' && /lipid/.test(m.id))
 
 /** Settings of a membrane: which lipid, how many layers, and how tightly and evenly they are packed. */
@@ -383,7 +445,7 @@ function MembraneSection({
       </div>
       {pct(t('Spacing'), item.spacing, 50, 200, 'mspacing', 'spacing')}
       {pct(t('Irregularity'), item.jitter, 0, 100, 'mjitter', 'jitter')}
-      {pct(t('Bend'), item.bend, -150, 150, 'mbend', 'bend')}
+      {!(item.pts && item.pts.length > 2) && pct(t('Bend'), item.bend, -150, 150, 'mbend', 'bend')}
       {pct(t('Opacity'), item.opacity, 5, 100, 'mop', 'opacity')}
       <div className="btn-row">
         {item.layers === 1 && (
@@ -394,6 +456,14 @@ function MembraneSection({
         </button>
         <span className="note small">{t('{n} lipids', { n: count })}</span>
       </div>
+      {item.pts && item.pts.length > 2 && (
+        <div className="btn-row">
+          <button type="button" className="mini" onClick={() => onSet({ pts: undefined, bend: 0 }, 'mstraight')}>
+            {t('Straighten')}
+          </button>
+          <span className="note small">{t('Freehand brush stroke')}</span>
+        </div>
+      )}
       {meta && (
         <p className="note small">
           {t('By')}{' '}
@@ -412,6 +482,7 @@ function MembraneSection({
           {item.colors ? t(' Recoloured icons are credited as adapted.') : ''}
         </p>
       )}
+      <p className="note small">{t('Drag across the board to paint a membrane; the lipids follow your stroke.')}</p>
       <p className="note small">{t('Drag the round handles to move the ends, and the diamond to bend it.')}</p>
     </Section>
   )
@@ -541,6 +612,7 @@ export function Inspector(props: Props) {
   }
 
   const arrange = (
+    <>
     <Section title={t('Arrange')}>
       <div className="btn-row">
         <IconBtn icon="front" label={t('Bring to front')} onClick={() => props.onOrder('front')} />
@@ -567,6 +639,8 @@ export function Inspector(props: Props) {
         <IconBtn icon="trash" label={t('Delete')} onClick={props.onDelete} />
       </div>
     </Section>
+    <RepeatSection onRepeat={props.onRepeat} />
+    </>
   )
 
   let body: ReactNode
@@ -728,9 +802,7 @@ export function Inspector(props: Props) {
                 />
               ))}
             </div>
-            {palette.length > 12 && (
-              <p className="note small">{t('Showing the 12 most used of {n} colours.', { n: palette.length })}</p>
-            )}
+            {palette.length > 12 && <MoreColours palette={palette} colors={one.colors} set={set} />}
             <button type="button" className="mini" disabled={!one.colors} onClick={() => set({ colors: undefined }, 'colreset')}>
               {t('Reset colours')}
             </button>
@@ -971,6 +1043,7 @@ export function Inspector(props: Props) {
                   <option value="end">{t('At the end')}</option>
                   <option value="both">{t('At both ends')}</option>
                   <option value="none">{t('None (plain line)')}</option>
+                  <option value="inhibit">{t('Inhibition (⊣)')}</option>
                 </select>
               </label>
             </div>

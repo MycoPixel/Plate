@@ -108,7 +108,7 @@ export type ArrowItem = Flags & {
   y2: number
   stroke: string
   strokeWidth: number
-  head: 'end' | 'both' | 'none'
+  head: 'end' | 'both' | 'none' | 'inhibit'
   dashed: boolean
   kind: 'straight' | 'elbow' | 'curve'
   /** Curve: sideways bulge as a fraction of the length. Elbow: where the bend sits along the arrow (0 to 1). */
@@ -151,6 +151,8 @@ export type MembraneItem = Flags & {
   opacity: number
   /** Single layer: put the heads on the other side. */
   flip: boolean
+  /** A freehand brush stroke; when set the lipids follow it, from the first point to the last. */
+  pts?: Pt[]
   colors?: Record<string, string>
 }
 

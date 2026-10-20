@@ -224,7 +224,8 @@ export function distributeBoxes(boxes: Map<string, Rect>, axis: 'h' | 'v'): Map<
 
 export function translateItem(item: Item, dx: number, dy: number): Item {
   if (item.type === 'arrow' || item.type === 'membrane') {
-    return { ...item, x1: item.x1 + dx, y1: item.y1 + dy, x2: item.x2 + dx, y2: item.y2 + dy }
+    const pts = item.type === 'membrane' && item.pts ? item.pts.map((p) => ({ x: p.x + dx, y: p.y + dy })) : undefined
+    return { ...item, x1: item.x1 + dx, y1: item.y1 + dy, x2: item.x2 + dx, y2: item.y2 + dy, ...(pts ? { pts } : {}) }
   }
   return { ...item, x: item.x + dx, y: item.y + dy }
 }
@@ -357,6 +358,20 @@ export function arrowParts(a: ArrowItem) {
     const s = Math.min(L * 0.8, room(0, 1))
     pts[0] = { x: pts[0].x + core.start.x * s, y: pts[0].y + core.start.y * s }
   }
+  if (a.head === 'inhibit') {
+    const t = core.pts[last]
+    const v = core.end
+    const px = -v.y
+    const py = v.x
+    const bw = Math.max(7, a.strokeWidth * 3.5)
+    const th = Math.max(2.4, a.strokeWidth * 0.9)
+    const ox = v.x * th * 0.5
+    const oy = v.y * th * 0.5
+    const corner = (sx: number, sy: number) => `${r3(t.x + px * bw * sx + ox * sy)},${r3(t.y + py * bw * sx + oy * sy)}`
+    heads.push([corner(1, 1), corner(-1, 1), corner(-1, -1), corner(1, -1)].join(' '))
+    const s = Math.min(th, room(last, Math.max(0, last - 1)))
+    pts[last] = { x: t.x - v.x * s, y: t.y - v.y * s }
+  }
   return { d: pathOf(pts, core.curve), hit: pathOf(core.pts, core.curve), heads, handle: core.peak }
 }
 
@@ -382,7 +397,16 @@ export function scaleItem(item: Item, f: number, o: Pt): Item {
     case 'arrow':
       return { ...item, x1: sx(item.x1), y1: sy(item.y1), x2: sx(item.x2), y2: sy(item.y2) }
     case 'membrane':
-      return { ...item, x1: sx(item.x1), y1: sy(item.y1), x2: sx(item.x2), y2: sy(item.y2), size: Math.max(2, item.size * f), gap: item.gap * f }
+      return {
+        ...item,
+        x1: sx(item.x1),
+        y1: sy(item.y1),
+        x2: sx(item.x2),
+        y2: sy(item.y2),
+        pts: item.pts?.map((p) => ({ x: sx(p.x), y: sy(p.y) })),
+        size: Math.max(2, item.size * f),
+        gap: item.gap * f,
+      }
     case 'text':
       return { ...item, x: sx(item.x), y: sy(item.y), fontSize: Math.max(4, item.fontSize * f) }
     case 'marker':

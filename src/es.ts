@@ -551,5 +551,28 @@ export const ES: Record<string, string> = {
   'Delete {name}': 'Eliminar {name}',
   'Delete “{name}”? This cannot be undone.': '¿Eliminar “{name}”? No se puede deshacer.',
 
-  'Could not draw a thumbnail.': 'No se pudo dibujar una miniatura.'
+  'Could not draw a thumbnail.': 'No se pudo dibujar una miniatura.',
+
+  'More colours': 'Más colores',
+  '{n} more colours': '{n} colores más',
+  'Fewer colours': 'Menos colores',
+
+  // petri dish
+  'Petri dish': 'Placa de Petri',
+  'An agar plate with colonies, streaks, dilution spots or an inhibition zone, added as ordinary shapes.': 'Una placa de agar con colonias, estrías, diluciones o zonas de inhibición, añadida como formas normales.',
+  'Plate pattern': 'Patrón de la placa',
+  'Colonies': 'Colonias',
+  'Streaks': 'Estrías',
+  'Serial dilution': 'Dilución seriada',
+  'Inhibition zones': 'Zonas de inhibición',
+  'Petri dish…': 'Placa de Petri…',
+  'Straighten': 'Enderezar',
+  'Freehand brush stroke': 'Trazo a mano alzada',
+  'Drag across the board to paint a membrane; the lipids follow your stroke.': 'Arrastra por el lienzo para pintar una membrana; los lípidos siguen tu trazo.',
+  'Repeat': 'Repetir',
+  'Copies': 'Copias',
+  'Step X': 'Paso X',
+  'Step Y': 'Paso Y',
+  'Add copies': 'Añadir copias',
+  'Inhibition (⊣)': 'Inhibición (⊣)',
 }

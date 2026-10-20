@@ -27,8 +27,68 @@ function rng(seed: number) {
   }
 }
 
-/** The line the membrane runs along: a quadratic curve, straight when bend is 0. */
-function centreLine(m: Pick<MembraneItem, 'x1' | 'y1' | 'x2' | 'y2' | 'bend'>) {
+type Line = {
+  c?: Pt
+  at: (t: number) => Pt
+  /** Unit direction of travel at t. */
+  dir: (t: number) => Pt
+  len: number
+}
+
+/** Chaikin's corner cutting: turns the raw brush points into a smooth line without overshooting. */
+export function smoothStroke(pts: Pt[], rounds = 2): Pt[] {
+  let p = pts
+  for (let r = 0; r < rounds && p.length > 2; r++) {
+    const q: Pt[] = [p[0]]
+    for (let i = 0; i < p.length - 1; i++) {
+      const a = p[i]
+      const b = p[i + 1]
+      q.push({ x: a.x * 0.75 + b.x * 0.25, y: a.y * 0.75 + b.y * 0.25 })
+      q.push({ x: a.x * 0.25 + b.x * 0.75, y: a.y * 0.25 + b.y * 0.75 })
+    }
+    q.push(p[p.length - 1])
+    p = q
+  }
+  return p
+}
+
+/** A polyline parametrised by distance, so lipids stay evenly spaced along a freehand stroke. */
+function strokeLine(pts: Pt[]): Line | null {
+  const p = smoothStroke(pts)
+  const cum = [0]
+  for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i].x - p[i - 1].x, p[i].y - p[i - 1].y))
+  const total = cum[cum.length - 1]
+  if (total < 1e-6) return null
+  const segAt = (s: number) => {
+    const d = Math.min(total, Math.max(0, s))
+    let lo = 0
+    let hi = cum.length - 1
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1
+      if (cum[mid] <= d) lo = mid
+      else hi = mid
+    }
+    const span = cum[hi] - cum[lo]
+    const u = span > 1e-9 ? (d - cum[lo]) / span : 0
+    return { a: p[lo], b: p[hi], u }
+  }
+  return {
+    at: (t) => {
+      const { a, b, u } = segAt(t * total)
+      return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u }
+    },
+    dir: (t) => {
+      const { a, b } = segAt(t * total)
+      const l = Math.hypot(b.x - a.x, b.y - a.y)
+      return l < 1e-9 ? { x: 1, y: 0 } : { x: (b.x - a.x) / l, y: (b.y - a.y) / l }
+    },
+    len: total,
+  }
+}
+
+/** The line the membrane runs along: a freehand stroke, or a quadratic curve (straight when bend is 0). */
+function centreLine(m: Pick<MembraneItem, 'x1' | 'y1' | 'x2' | 'y2' | 'bend' | 'pts'>): Line | null {
+  if (m.pts && m.pts.length > 2) return strokeLine(m.pts)
   const dx = m.x2 - m.x1
   const dy = m.y2 - m.y1
   const len = Math.hypot(dx, dy)
@@ -38,7 +98,6 @@ function centreLine(m: Pick<MembraneItem, 'x1' | 'y1' | 'x2' | 'y2' | 'bend'>) {
     const u = 1 - t
     return { x: u * u * m.x1 + 2 * u * t * c.x + t * t * m.x2, y: u * u * m.y1 + 2 * u * t * c.y + t * t * m.y2 }
   }
-  /** Unit direction of travel at t. */
   const dir = (t: number): Pt => {
     const tx = 2 * (1 - t) * (c.x - m.x1) + 2 * t * (m.x2 - c.x)
     const ty = 2 * (1 - t) * (c.y - m.y1) + 2 * t * (m.y2 - c.y)
@@ -80,10 +139,12 @@ export function membraneLayout(m: MembraneItem, aspect = aspectOf(m.iconId)): Me
   if (!line) {
     return { lipids: [], w, h, thickness, d: `M${fmt(m.x1)} ${fmt(m.y1)}L${fmt(m.x2)} ${fmt(m.y2)}`, peak: { x: m.x1, y: m.y1 } }
   }
-  const d =
-    Math.abs(m.bend) < 1e-9
+  const poly = m.pts && m.pts.length > 2 ? smoothStroke(m.pts) : null
+  const d = poly
+    ? 'M' + poly.map((p) => `${fmt(p.x)} ${fmt(p.y)}`).join('L')
+    : Math.abs(m.bend) < 1e-9
       ? `M${fmt(m.x1)} ${fmt(m.y1)}L${fmt(m.x2)} ${fmt(m.y2)}`
-      : `M${fmt(m.x1)} ${fmt(m.y1)}Q${fmt(line.c.x)} ${fmt(line.c.y)} ${fmt(m.x2)} ${fmt(m.y2)}`
+      : `M${fmt(m.x1)} ${fmt(m.y1)}Q${fmt(line.c?.x ?? m.x1)} ${fmt(line.c?.y ?? m.y1)} ${fmt(m.x2)} ${fmt(m.y2)}`
 
   const layers = bilayer
     ? [
@@ -150,7 +211,7 @@ export function membraneLayout(m: MembraneItem, aspect = aspectOf(m.iconId)): Me
 export function membraneBounds(m: MembraneItem, aspect = aspectOf(m.iconId)): Rect {
   const line = centreLine(m)
   const half = (m.layers === 2 ? 2 * m.size * aspect + Math.max(0, m.gap) : m.size * aspect) / 2
-  const pts: Pt[] = line ? Array.from({ length: 33 }, (_, i) => line.at(i / 32)) : [{ x: m.x1, y: m.y1 }]
+  const pts: Pt[] = m.pts && m.pts.length > 2 ? smoothStroke(m.pts) : line ? Array.from({ length: 33 }, (_, i) => line.at(i / 32)) : [{ x: m.x1, y: m.y1 }]
   const xs = pts.map((p) => p.x)
   const ys = pts.map((p) => p.y)
   const x = Math.min(...xs) - half

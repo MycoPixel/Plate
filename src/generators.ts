@@ -26,6 +26,14 @@ export type GelOptions = {
   kind: 'gel' | 'blot'
 }
 
+export type PetriPattern = 'colonies' | 'streaks' | 'dilution' | 'inhibition'
+
+export type PetriOptions = {
+  pattern: PetriPattern
+}
+
+const COLONY_COLORS = ['#E8B4B8', '#B8D8BA', '#F4D29A', '#A8C8E8', '#D9C2E8']
+
 const rowName = (i: number) => String.fromCharCode(65 + (i % 26))
 
 /** A grid of wells with row letters and column numbers, centred on the board. */
@@ -71,14 +79,15 @@ export function gelLanes({ lanes, bands, kind }: GelOptions, doc: Doc): Item[] {
   const laneW = lanes > 8 ? 46 : 62
   const laneGap = 10
   const width = lanes * laneW + (lanes - 1) * laneGap
-  const height = Math.max(220, 110 + bands * 42)
+  const height = Math.max(220, 66 + bands * 42)
   const x0 = (doc.width - width) / 2
   const y0 = (doc.height - height) / 2 + 8
+  const pad = { top: 44 }
   const out: Item[] = [
     {
-      ...newShape('rect', { x: x0 - 18, y: y0 - 18 }),
+      ...newShape('rect', { x: x0 - 18, y: y0 - pad.top }),
       w: width + 36,
-      h: height + 36,
+      h: height + pad.top + 18,
       fill: kind === 'gel' ? '#EDF2F4' : '#FFFFFF',
       stroke: '#8FA0A8',
       strokeWidth: 2,
@@ -87,7 +96,7 @@ export function gelLanes({ lanes, bands, kind }: GelOptions, doc: Doc): Item[] {
   ]
   for (let i = 0; i < lanes; i++) {
     const x = x0 + i * (laneW + laneGap)
-    out.push(newText({ x: x + laneW / 2, y: y0 - 26 }, String(i + 1), 16))
+    out.push(newText({ x: x + laneW / 2, y: y0 - pad.top + 16 }, String(i + 1), 16))
     const label = out[out.length - 1]
     if (label.type === 'text') { label.align = 'center'; label.fill = '#5B6B76' }
     out.push({
@@ -115,6 +124,92 @@ export function gelLanes({ lanes, bands, kind }: GelOptions, doc: Doc): Item[] {
         radius: 2,
         opacity: kind === 'gel' ? 0.5 + 0.4 * j : 0.65 + 0.3 * j,
       })
+    }
+  }
+  return out
+}
+
+/** An agar plate: a dish with colonies, streaks, a dilution grid, or an inhibition zone. */
+export function petriDish(pattern: PetriPattern, doc: Doc): Item[] {
+  const D = Math.min(doc.width, doc.height) * 0.74
+  const cx = doc.width / 2
+  const cy = doc.height / 2
+  const R = D / 2
+  const x0 = cx - R
+  const y0 = cy - R
+  const out: Item[] = [
+    { ...newShape('ellipse', { x: x0, y: y0 }), w: D, h: D, fill: '#FBF7EE', stroke: '#9AA5AB', strokeWidth: 2.5 },
+    { ...newShape('ellipse', { x: x0 + 9, y: y0 + 9 }), w: D - 18, h: D - 18, fill: 'none', stroke: '#C9CFD3', strokeWidth: 1 },
+  ]
+  const colony = (fx: number, fy: number, size: number, color: string, opacity: number) =>
+    out.push({
+      ...newShape('ellipse', { x: cx + fx * R - size / 2, y: cy + fy * R - size / 2 }),
+      w: size,
+      h: size,
+      fill: color,
+      stroke: 'none',
+      strokeWidth: 0,
+      opacity,
+    })
+
+  if (pattern === 'colonies') {
+    for (let i = 0; i < 30; i++) {
+      const a = jitter(i * 3.7 + 11) * Math.PI * 2
+      const r = Math.sqrt(jitter(i * 7.1 + 5)) * 0.8
+      const size = 4 + jitter(i * 13.3) * 10
+      colony(Math.cos(a) * r, Math.sin(a) * r, size, COLONY_COLORS[i % COLONY_COLORS.length], 0.55 + jitter(i * 3.1) * 0.4)
+    }
+  } else if (pattern === 'streaks') {
+    // Zonal streaks: thin cleared lines radiating from the edge, denser near the plate rim.
+    for (let k = 0; k < 6; k++) {
+      const ang = -Math.PI / 2 + k * 0.42 + jitter(k * 5.5) * 0.12
+      const len = R * (0.55 + jitter(k * 9.1) * 0.4)
+      out.push({
+        ...newShape('ellipse', { x: cx + Math.cos(ang) * len * 0.5 - len / 2, y: cy + Math.sin(ang) * len * 0.5 - 2 }),
+        w: len,
+        h: 5,
+        rotation: (ang * 180) / Math.PI,
+        fill: '#FFFFFF',
+        stroke: 'none',
+        strokeWidth: 0,
+        opacity: 0.7,
+      })
+      for (let j = 0; j < 3; j++) {
+        const a2 = ang + (j + 1) * 0.09
+        const l2 = len * (1 - (j + 1) * 0.16)
+        out.push({
+          ...newShape('ellipse', { x: cx + Math.cos(a2) * l2 * 0.5 - l2 / 2, y: cy + Math.sin(a2) * l2 * 0.5 - 1.5 }),
+          w: l2,
+          h: 3,
+          rotation: (a2 * 180) / Math.PI,
+          fill: '#FFFFFF',
+          stroke: 'none',
+          strokeWidth: 0,
+          opacity: 0.55,
+        })
+      }
+    }
+  } else if (pattern === 'dilution') {
+    // Four dilution columns, spots shrinking as the sample is diluted.
+    const cols = 4
+    const rows = 3
+    const gap = 0.36
+    for (let c = 0; c < cols; c++) {
+      const size = 12 - c * 2.6
+      for (let r = 0; r < rows; r++) {
+        colony((c - (cols - 1) / 2) * gap, (r - (rows - 1) / 2) * gap, size, '#E8A0A0', 0.75 - c * 0.15)
+      }
+    }
+  } else {
+    // Antibiotic disc in the middle, a clear inhibition zone around it, colonies outside.
+    const zone = { ...newShape('ellipse', { x: cx - R * 0.36, y: cy - R * 0.36 }), w: R * 0.72, h: R * 0.72, fill: '#FFFFFF', stroke: 'none', strokeWidth: 0, opacity: 0.5 }
+    out.push(zone)
+    out.push({ ...newShape('ellipse', { x: cx - R * 0.15, y: cy - R * 0.15 }), w: R * 0.3, h: R * 0.3, fill: '#D9B8E6', stroke: '#8B5FA8', strokeWidth: 1.5, opacity: 0.85 })
+    for (let i = 0; i < 22; i++) {
+      const a = jitter(i * 5.9 + 3) * Math.PI * 2
+      const r = 0.42 + jitter(i * 11.7) * 0.42
+      const size = 4 + jitter(i * 4.3) * 9
+      colony(Math.cos(a) * r, Math.sin(a) * r, size, COLONY_COLORS[(i * 2) % COLONY_COLORS.length], 0.6 + jitter(i * 8.1) * 0.35)
     }
   }
   return out

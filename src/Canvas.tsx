@@ -38,7 +38,7 @@ type Drag =
   | { kind: 'rotate'; origin: IconItem | ImageItem | ShapeItem | TextItem | ChartItem; center: Pt; startAngle: number; moved: boolean }
   | { kind: 'arrowEnd'; which: 1 | 2; origin: ArrowItem; moved: boolean }
   | { kind: 'arrowBend'; origin: ArrowItem; moved: boolean }
-  | { kind: 'create'; tool: CreateTool; start: Pt; id: string | null; from: string | null }
+  | { kind: 'create'; tool: CreateTool; start: Pt; id: string | null; from: string | null; pts?: Pt[] }
   /** A polygon or curve being drawn: each click drops a corner, and the shape lives on as we go. */
   | { kind: 'draft'; tool: 'poly' | 'path'; id: string | null; pts: Pt[] }
   | { kind: 'lineEnd'; which: 1 | 2; origin: MembraneItem; moved: boolean }
@@ -414,17 +414,19 @@ function Overlay({ items, zoom }: { items: Item[]; zoom: number }) {
       return (
         <g>
           <path className="sel-line" d={d} fill="none" vectorEffect="non-scaling-stroke" pointerEvents="none" />
-          <rect
-            className="handle"
-            data-handle="bend"
-            x={peak.x - hs / 2}
-            y={peak.y - hs / 2}
-            width={hs}
-            height={hs}
-            transform={`rotate(45 ${peak.x} ${peak.y})`}
-            vectorEffect="non-scaling-stroke"
-            style={{ cursor: 'move' }}
-          />
+          {!(it.pts && it.pts.length > 2) && (
+            <rect
+              className="handle"
+              data-handle="bend"
+              x={peak.x - hs / 2}
+              y={peak.y - hs / 2}
+              width={hs}
+              height={hs}
+              transform={`rotate(45 ${peak.x} ${peak.y})`}
+              vectorEffect="non-scaling-stroke"
+              style={{ cursor: 'move' }}
+            />
+          )}
           {([1, 2] as const).map((w) => (
             <circle
               key={w}
@@ -753,7 +755,8 @@ export function Canvas(props: CanvasProps) {
     }
     if (tool !== 'select') {
       const from = (tool === 'arrow' || tool === 'line') && !e.altKey ? targetAt(doc, p, ATTACH_PX / zoom) : null
-      drag.current = { kind: 'create', tool, start: snapP(p), id: null, from: from?.id ?? null }
+      const start = snapP(p)
+      drag.current = { kind: 'create', tool, start, id: null, from: from?.id ?? null, pts: tool === 'membrane' ? [start] : undefined }
       return
     }
 
@@ -942,6 +945,12 @@ export function Canvas(props: CanvasProps) {
         const q = e.shiftKey ? snapAngle(other, p) : snapP(p)
         patch(d.origin.id, (it) => {
           if (it.type !== 'membrane') return it
+          const pts = it.pts?.slice()
+          if (pts && pts.length > 2) {
+            if (d.which === 1) pts[0] = q
+            else pts[pts.length - 1] = q
+            return d.which === 1 ? { ...it, x1: q.x, y1: q.y, pts } : { ...it, x2: q.x, y2: q.y, pts }
+          }
           return d.which === 1 ? { ...it, x1: q.x, y1: q.y } : { ...it, x2: q.x, y2: q.y }
         })
         break
@@ -991,6 +1000,12 @@ export function Canvas(props: CanvasProps) {
             return { ...it, x2: end.x, y2: end.y, to: hit ? { id: hit.id } : undefined }
           }
           if (it.type === 'membrane') {
+            if (d.pts) {
+              const last = d.pts[d.pts.length - 1]
+              if (Math.hypot(p.x - last.x, p.y - last.y) * zoom > 2 && d.pts.length < 400) d.pts.push(p)
+              const a = d.pts[0]
+              return { ...it, x1: a.x, y1: a.y, x2: p.x, y2: p.y, pts: d.pts.length > 2 ? d.pts.slice() : undefined }
+            }
             const end = e.shiftKey ? snapAngle(d.start, p) : q
             return { ...it, x2: end.x, y2: end.y }
           }
@@ -1040,6 +1055,16 @@ export function Canvas(props: CanvasProps) {
     if (d.kind === 'marquee') setMarquee(null)
     setConnectTo(null)
     if (d.kind === 'move' && !d.moved && !d.shift && selection.length > 1) setSelection(expandGroups(doc.items, [d.primary]))
+    if (d.kind === 'create' && d.id && d.tool === 'membrane' && d.pts && d.pts.length > 2) {
+      const a = d.pts[0]
+      const b = d.pts[d.pts.length - 1]
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const len = Math.hypot(dx, dy) || 1
+      let dev = 0
+      for (const p of d.pts) dev = Math.max(dev, Math.abs((p.x - a.x) * dy - (p.y - a.y) * dx) / len)
+      if (dev < 8) patch(d.id, (it) => (it.type === 'membrane' ? { ...it, pts: undefined } : it))
+    }
     if (d.kind === 'create' && d.id) props.onToolDone()
   }
 

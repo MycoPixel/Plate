@@ -802,6 +802,9 @@ input[type='checkbox'] {
   gap: 6px;
   margin-bottom: 8px;
 }
+.more-colours {
+  margin-bottom: 8px;
+}
 .swatches input[type='color'] {
   width: 30px;
   height: 30px;

@@ -12,8 +12,8 @@ import { ExportDialog } from './ExportDialog'
 import type { ExportRequest } from './ExportDialog'
 import { aabbOf, distributeBoxes, measureText, scaleItem, translateItem, unionAabb } from './geometry'
 import { GeneratorDialog } from './GeneratorDialog'
-import type { GeneratorKind, GeneratorRequest } from './GeneratorDialog'
-import { gelLanes, wellPlate, PLATE_PRESETS } from './generators'
+import type { GeneratorRequest } from './GeneratorDialog'
+import { gelLanes, petriDish, wellPlate, PLATE_PRESETS } from './generators'
 import { Glyph } from './Glyph'
 import type { GlyphName } from './Glyph'
 import { useHistory } from './history'
@@ -111,7 +111,7 @@ export default function App() {
   const [replaceOpen, setReplaceOpen] = useState(false)
   const [templateOpen, setTemplateOpen] = useState(false)
   const [chartOpen, setChartOpen] = useState(false)
-  const [generatorOpen, setGeneratorOpen] = useState<GeneratorKind | null>(null)
+  const [generatorOpen, setGeneratorOpen] = useState<'plate' | 'gel' | 'petri' | null>(null)
   const [colorVision, setColorVision] = useState<ColorVision>('normal')
   const [exportOpen, setExportOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -281,6 +281,31 @@ export default function App() {
     set((d) => ({ ...d, items: [...d.items, ...clones] }))
     setSelection(clones.map((c) => c.id))
   }, [selectedItems, set])
+
+  const repeatSelection = useCallback(
+    (count: number, dx: number, dy: number) => {
+      if (!selectedItems.length) return
+      const made: Item[] = []
+      for (let k = 1; k <= count; k++) {
+        const groups = new Map<string, string>()
+        const ids = new Map<string, string>()
+        const moved = selectedItems.map((it) => {
+          const c = { ...translateItem(it, dx * k, dy * k), id: uid() } as Item
+          ids.set(it.id, c.id)
+          if (it.group) {
+            const key = `${k}:${it.group}`
+            if (!groups.has(key)) groups.set(key, uid())
+            c.group = groups.get(key)
+          }
+          return c
+        })
+        made.push(...remapAnchors(moved, ids))
+      }
+      set((d) => ({ ...d, items: [...d.items, ...made] }))
+      setSelection(made.map((c) => c.id))
+    },
+    [selectedItems, set],
+  )
 
   const remove = useCallback(() => {
     if (!sel.length) return
@@ -605,7 +630,9 @@ export default function App() {
       const items =
         req.kind === 'plate'
           ? wellPlate(PLATE_PRESETS.find((p) => p.id === req.preset) ?? PLATE_PRESETS[4], doc)
-          : gelLanes(req.options, doc)
+          : req.kind === 'gel'
+            ? gelLanes(req.options, doc)
+            : petriDish(req.pattern, doc)
       set((d) => ({ ...d, items: [...d.items, ...items] }))
       setSelection(items.map((i) => i.id))
       setGeneratorOpen(null)
@@ -848,6 +875,7 @@ export default function App() {
           </MenuItem>
           <MenuItem onClick={() => setGeneratorOpen('plate')}>{t('Well plate…')}</MenuItem>
           <MenuItem onClick={() => setGeneratorOpen('gel')}>{t('Gel or blot…')}</MenuItem>
+          <MenuItem onClick={() => setGeneratorOpen('petri')}>{t('Petri dish…')}</MenuItem>
           <MenuItem onClick={() => setChartOpen(true)}>{t('Chart from a table…')}</MenuItem>
           <MenuItem onClick={() => setStructureOpen(true)}>{t('Chemical structure from SMILES…')}</MenuItem>
           <MenuItem onClick={() => imageRef.current?.click()}>{t('Image or SVG…')}</MenuItem>
@@ -1027,6 +1055,7 @@ export default function App() {
             patch={patchItems}
             patchDoc={patchDoc}
             onDuplicate={duplicate}
+            onRepeat={repeatSelection}
             onDelete={remove}
             onOrder={order}
             onArrange={align}

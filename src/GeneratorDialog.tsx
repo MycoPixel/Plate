@@ -1,16 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { Glyph } from './Glyph'
 import { PLATE_PRESETS } from './generators'
-import type { GelOptions, PlatePresetId } from './generators'
+import type { GelOptions, PetriPattern, PlatePresetId } from './generators'
 import { t } from './i18n'
 
-export type GeneratorKind = 'plate' | 'gel'
+export type GeneratorKind = 'plate' | 'gel' | 'petri'
 
 export type GeneratorRequest =
   | { kind: 'plate'; preset: PlatePresetId }
   | { kind: 'gel'; options: GelOptions }
+  | { kind: 'petri'; pattern: PetriPattern }
 
 const clampInt = (v: string, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(Number(v) || lo)))
+
+const PATTERNS: { id: PetriPattern; label: string }[] = [
+  { id: 'colonies', label: 'Colonies' },
+  { id: 'streaks', label: 'Streaks' },
+  { id: 'dilution', label: 'Serial dilution' },
+  { id: 'inhibition', label: 'Inhibition zones' },
+]
 
 export function GeneratorDialog({
   open,
@@ -25,6 +33,7 @@ export function GeneratorDialog({
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   const [preset, setPreset] = useState<PlatePresetId>('96')
+  const [pattern, setPattern] = useState<PetriPattern>('colonies')
   const [lanes, setLanes] = useState(6)
   const [bands, setBands] = useState(5)
   const [blot, setBlot] = useState(false)
@@ -41,7 +50,7 @@ export function GeneratorDialog({
     <dialog ref={ref} className="dialog" onClose={onClose} onClick={(e) => e.target === ref.current && onClose()}>
       <div className="dialog-body">
         <header className="dialog-head">
-          <h2>{plate ? t('Well plate') : t('Gel or blot')}</h2>
+          <h2>{plate ? t('Well plate') : kind === 'gel' ? t('Gel or blot') : t('Petri dish')}</h2>
           <button type="button" className="icon-btn" aria-label={t('Close')} onClick={onClose}>
             <Glyph name="close" />
           </button>
@@ -49,7 +58,9 @@ export function GeneratorDialog({
         <p className="note">
           {plate
             ? t('A grid of wells with row letters and column numbers, added to the board as ordinary shapes you can repaint and move.')
-            : t('Numbered lanes with evenly spaced bands, added as ordinary shapes. Use them as a starting point and drag the bands to match your data.')}
+            : kind === 'gel'
+              ? t('Numbered lanes with evenly spaced bands, added as ordinary shapes. Use them as a starting point and drag the bands to match your data.')
+              : t('An agar plate with colonies, streaks, dilution spots or an inhibition zone, added as ordinary shapes.')}
         </p>
         {plate ? (
           <label className="field wide">
@@ -62,7 +73,7 @@ export function GeneratorDialog({
               ))}
             </select>
           </label>
-        ) : (
+        ) : kind === 'gel' ? (
           <>
             <div className="gen-row">
               <label className="field">
@@ -97,6 +108,17 @@ export function GeneratorDialog({
               {t('Bands are placed evenly. Select one and drag it to line it up with a ladder.')}
             </p>
           </>
+        ) : (
+          <label className="field wide">
+            <span>{t('Plate pattern')}</span>
+            <select value={pattern} onChange={(e) => setPattern(e.target.value as PetriPattern)}>
+              {PATTERNS.map((pt) => (
+                <option key={pt.id} value={pt.id}>
+                  {t(pt.label)}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
         <div className="dialog-actions">
           <button type="button" className="btn" onClick={onClose}>
@@ -109,7 +131,9 @@ export function GeneratorDialog({
               onInsert(
                 plate
                   ? { kind: 'plate', preset }
-                  : { kind: 'gel', options: { lanes, bands, kind: blot ? 'blot' : 'gel' } },
+                  : kind === 'gel'
+                    ? { kind: 'gel', options: { lanes, bands, kind: blot ? 'blot' : 'gel' } }
+                    : { kind: 'petri', pattern },
               )
             }
           >

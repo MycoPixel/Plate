@@ -169,14 +169,20 @@ function sanitizeItem(raw: unknown): Item | null {
     case 'membrane': {
       const iconId = str(raw.iconId, '')
       if (!iconId) return null
+      const pts = Array.isArray(raw.pts)
+        ? raw.pts
+            .filter(isObj)
+            .slice(0, 600)
+            .map((p) => ({ x: num(p.x, 0), y: num(p.y, 0) }))
+        : []
       return {
         ...flags,
         type: 'membrane',
         id,
-        x1: num(raw.x1, 0),
-        y1: num(raw.y1, 0),
-        x2: num(raw.x2, 0),
-        y2: num(raw.y2, 0),
+        x1: pts.length > 2 ? pts[0].x : num(raw.x1, 0),
+        y1: pts.length > 2 ? pts[0].y : num(raw.y1, 0),
+        x2: pts.length > 2 ? pts[pts.length - 1].x : num(raw.x2, 0),
+        y2: pts.length > 2 ? pts[pts.length - 1].y : num(raw.y2, 0),
         bend: Math.min(1.5, Math.max(-1.5, num(raw.bend, 0))),
         iconId,
         size: Math.min(400, Math.max(2, num(raw.size, 22))),
@@ -187,6 +193,7 @@ function sanitizeItem(raw: unknown): Item | null {
         seed: Math.floor(Math.abs(num(raw.seed, 1))) % 1_000_000_000,
         opacity: Math.min(1, Math.max(0, num(raw.opacity, 1))),
         flip: bool(raw.flip, false),
+        pts: pts.length > 2 ? pts : undefined,
         colors: colorMap(raw.colors),
       }
     }
@@ -201,7 +208,7 @@ function sanitizeItem(raw: unknown): Item | null {
         y2: num(raw.y2, 0),
         stroke: color(str(raw.stroke, '#13262F'), '#13262F'),
         strokeWidth: Math.max(0.5, num(raw.strokeWidth, 3)),
-        head: oneOf(raw.head, ['end', 'both', 'none'] as const, 'end'),
+        head: oneOf(raw.head, ['end', 'both', 'none', 'inhibit'] as const, 'end'),
         dashed: bool(raw.dashed, false),
         kind: oneOf(raw.kind, ['straight', 'elbow', 'curve'] as const, 'straight'),
         bend: Math.min(1.5, Math.max(-1.5, num(raw.bend, 0.5))),
