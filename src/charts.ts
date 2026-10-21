@@ -13,9 +13,6 @@ export const CHART_COLORS = ['#2F6F8F', '#D07B3F', '#5B8C5A', '#8B5FA8', '#C4563
 
 const n = (v: number) => +v.toFixed(2)
 
-const esc = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-
 const fontSize = 13
 
 /** Work out a rounded top of axis that holds the data with a little room. */
@@ -132,8 +129,9 @@ export function chartEls(item: ChartItem): ChartEl[] {
     let lx = plotL + 6
     series.forEach((s) => {
       out.push({ kind: 'rect', x: lx, y: ly - 7, w: 12, h: 12, rx: 2, fill: s.color, stroke: 'none', strokeWidth: 0 })
-      const label = esc(s.name)
-      out.push({ kind: 'text', x: lx + 16, y: ly + 3, text: label, size: fontSize - 1, fill: '#13262F', anchor: 'start' })
+      // Raw text: React escapes it on screen, and the exporter escapes it into the SVG.
+      // Escaping here too is what once drew "A&amp;T" on both.
+      out.push({ kind: 'text', x: lx + 16, y: ly + 3, text: s.name, size: fontSize - 1, fill: '#13262F', anchor: 'start' })
       lx += 16 + s.name.length * 7 + 18
     })
   }
@@ -148,6 +146,15 @@ export const blankSeries = (name: string, color: string, count: number): ChartSe
   values: Array.from({ length: count }, () => 0),
 })
 
+/** Reads one pasted cell as a number. Accepts a decimal comma ("8,2") and a true minus sign; anything else is not a number. */
+function cellNumber(cell: string): number | null {
+  const norm = cell.replace('−', '-').trim()
+  if (norm === '') return null
+  const withDot = /^-?(?:\d+(?:,\d+)?|,\d+)$/.test(norm) ? norm.replace(',', '.') : norm
+  const v = Number(withDot)
+  return Number.isFinite(v) ? v : null
+}
+
 /** Turns a pasted table into series. First row: categories. Each row below: one series. */
 export function parseChartTable(text: string): { series: ChartSeries[]; xNames: string[] } | string {
   const lines = text
@@ -161,6 +168,7 @@ export function parseChartTable(text: string): { series: ChartSeries[]; xNames: 
   if (header.length < 2) return t('The header row needs at least two columns.')
   const xNames = header.slice(1)
   const series: ChartSeries[] = []
+  const bad: string[] = []
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r]
     if (cells.length < 2) continue
@@ -169,18 +177,33 @@ export function parseChartTable(text: string): { series: ChartSeries[]; xNames: 
     const errors: number[] = []
     for (let c = 1; c < header.length; c++) {
       const cell = cells[c] ?? ''
-      const m = cell.match(/^(-?[0-9.]+)\s*±\s*([0-9.]+)$/)
+      // "1.2 ± 0.5". The value and the error must each be a real number, so a typo like
+      // 1.2.3 is caught below instead of becoming NaN and swallowing the bar.
+      const m = cell.match(/^(-?(?:\d+(?:\.\d+)?|\.\d+))\s*±\s*((?:\d+(?:\.\d+)?|\.\d+))$/)
       if (m) {
         values.push(Number(m[1]))
         errors.push(Number(m[2]))
+        continue
+      }
+      const v = cellNumber(cell)
+      if (v === null) {
+        // An empty cell is a gap in the table and stays a zero, as before. A word or a
+        // mangled number used to turn into zero without a word; now the paste is refused
+        // and the offending cells named instead.
+        if (cell.trim() !== '') {
+          if (bad.length < 4) bad.push(`"${cell.trim()}" (${name}, ${xNames[c - 1] ?? c})`)
+          else if (bad.length === 4) bad.push('…')
+        }
+        values.push(0)
+        errors.push(0)
       } else {
-        const v = Number(cell)
-        values.push(Number.isFinite(v) ? v : 0)
+        values.push(v)
         errors.push(0)
       }
     }
     series.push({ name, color: CHART_COLORS[(r - 1) % CHART_COLORS.length], values, errors: errors.some((e) => e > 0) ? errors : undefined })
   }
   if (!series.length) return t('Add one row per series, with numbers in the columns.')
+  if (bad.length) return t('These cells are not numbers: {list}. Nothing was added — fix them and paste again.', { list: bad.join(', ') })
   return { series, xNames }
 }

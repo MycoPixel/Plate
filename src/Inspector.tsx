@@ -292,6 +292,43 @@ function MoreColours({
 
 const LIPIDS = ICONS.filter((m) => m.category === 'Cell membrane' && /lipid/.test(m.id))
 
+/** The host name of an icon's source page, or the text itself when it is not a real URL. */
+const hostOf = (url: string) => {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return url
+  }
+}
+
+/**
+ * A list of numbers you can type over: the text stays exactly as typed until the field
+ * loses focus, while every finished number is applied to the figure at once. The old
+ * version wrote the parsed numbers straight back, so typing "0.5" collapsed to "0" after
+ * the first keystroke.
+ */
+function NumberListField({ value, onCommit, rows = 2 }: { value: number[]; onCommit: (nums: number[]) => void; rows?: number }) {
+  const [text, setText] = useState<string | null>(null)
+  return (
+    <textarea
+      rows={rows}
+      className="mono"
+      value={text ?? value.map((v) => String(v)).join(', ')}
+      onChange={(e) => {
+        setText(e.target.value)
+        onCommit(
+          e.target.value
+            .split(/[,\s]+/)
+            .map((w) => w.trim())
+            .filter((w) => w.length > 0 && Number.isFinite(Number(w)))
+            .map((w) => Number(w)),
+        )
+      }}
+      onBlur={() => setText(null)}
+    />
+  )
+}
+
 /** Settings of a membrane: which lipid, how many layers, and how tightly and evenly they are packed. */
 /** The data behind a chart: series names, colours, values and error bars. */
 function ChartSection({
@@ -308,12 +345,6 @@ function ChartSection({
     next[si] = { ...next[si], ...p }
     setSeries(next, 'cs')
   }
-  const numbers = (txt: string) =>
-    txt
-      .split(/[,\s]+/)
-      .map((w) => w.trim())
-      .filter((w) => w.length > 0)
-      .map((w) => Number(w))
   return (
     <Section title={t('Data')}>
       <label className="field wide">
@@ -367,24 +398,14 @@ function ChartSection({
           </div>
           <label className="field wide">
             <span>{t('Values, in category order')}</span>
-            <textarea
-              rows={2}
-              className="mono"
-              value={sr.values.map((v) => String(v)).join(', ')}
-              onChange={(e) => {
-                const vals = numbers(e.target.value)
-                edit(si, { values: vals })
-              }}
-            />
+            <NumberListField value={sr.values} onCommit={(vals) => edit(si, { values: vals })} />
           </label>
           <label className="field wide">
             <span>{t('Error bars, leave blank for none')}</span>
-            <textarea
+            <NumberListField
               rows={1}
-              className="mono"
-              value={(sr.errors ?? []).map((v) => String(v)).join(', ')}
-              onChange={(e) => {
-                const errs = numbers(e.target.value)
+              value={sr.errors ?? []}
+              onCommit={(errs) => {
                 const short = errs.slice(0, sr.values.length)
                 while (short.length < sr.values.length) short.push(0)
                 edit(si, { errors: short.some((v) => v > 0) ? short : undefined })
@@ -774,7 +795,7 @@ export function Inspector(props: Props) {
                 <>
                   ,{' '}
                   <a href={meta.source} target="_blank" rel="noreferrer">
-                    {new URL(meta.source).hostname}
+                    {hostOf(meta.source)}
                   </a>
                 </>
               )}

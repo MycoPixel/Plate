@@ -624,4 +624,11 @@ export const ES: Record<string, string> = {
   'Restored the version from {when}. The state it replaced is still in the history.': 'Versión del {when} restaurada. El estado que reemplazó sigue en el historial.',
   'Your icons': 'Tus iconos',
   'Your own drawings: {list}.': 'Tus propios dibujos: {list}.',
+  // error boundary and chart table checks
+  'Something went wrong': 'Algo salió mal',
+  'This panel hit an error it could not recover from. The rest of the editor still works, and your figure is saved.': 'Este panel encontró un error del que no pudo recuperarse. El resto del editor sigue funcionando y tu figura está guardada.',
+  'The editor stopped because of an unexpected error. Your figure is saved automatically; reload to carry on.': 'El editor se detuvo por un error inesperado. Tu figura se guarda automáticamente; recarga para continuar.',
+  'Try again': 'Reintentar',
+  'Reload the editor': 'Recargar el editor',
+  'These cells are not numbers: {list}. Nothing was added — fix them and paste again.': 'Estas celdas no son números: {list}. No se añadió nada; corrígelas y vuelve a pegar.',
 }

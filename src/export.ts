@@ -226,6 +226,13 @@ export async function thumbOf(doc: Doc, maxW = 320): Promise<string> {
 }
 
 const MAX_PX = 8000
+/** Safari refuses to draw canvases above roughly 16.7 million pixels, returning a blank
+   image instead; every browser stays under this on both axes. */
+const MAX_AREA = 16_000_000
+
+/** The scale renderPng will really use, so the picture stays drawable everywhere. */
+const pngScale = (width: number, height: number, scale: number) =>
+  Math.min(scale, MAX_PX / Math.max(width, height), Math.sqrt(MAX_AREA / Math.max(1, width * height)))
 
 /**
  * `dpi` (optional) is written into the PNG so other programs place it at the intended physical size.
@@ -239,15 +246,15 @@ export async function renderPng(
   opts: SvgOptions & { dpi?: number } = {},
 ): Promise<Blob> {
   const { svg, width, height } = await buildSvg(doc, withCredits, opts)
-  const s = Math.min(scale, MAX_PX / Math.max(width, height))
+  const s = pngScale(width, height, scale)
   const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }))
   try {
     const img = new Image()
     img.src = url
     await img.decode()
     const canvas = document.createElement('canvas')
-    canvas.width = Math.round(width * s)
-    canvas.height = Math.round(height * s)
+    canvas.width = Math.max(1, Math.round(width * s))
+    canvas.height = Math.max(1, Math.round(height * s))
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('Canvas is not available in this browser.')
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
@@ -262,7 +269,7 @@ export async function renderPng(
 
 /** Largest scale renderPng will really use, so the export dialog can tell the truth about the pixel size. */
 export const pngSize = (width: number, height: number, scale: number) => {
-  const s = Math.min(scale, MAX_PX / Math.max(width, height))
+  const s = pngScale(width, height, scale)
   return { w: Math.round(width * s), h: Math.round(height * s), limited: s < scale }
 }
 

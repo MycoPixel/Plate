@@ -1,6 +1,8 @@
-/* Offline shell for EnlacePlot. Hashed scripts and styles are cached as they are fetched;
-   icons and images are left to the network so the cache cannot grow without end. */
-const CACHE = 'enlaceplot-v1'
+/* Offline shell for EnlacePlot. The HTML shell is fetched from the network first so a
+   new deploy actually reaches people, falling back to the cache only when offline.
+   Hashed scripts and styles are cached as they are fetched; icons and images are left
+   to the network so the cache cannot grow without end. */
+const CACHE = 'enlaceplot-v2'
 const KEEP = [CACHE]
 
 self.addEventListener('install', () => {
@@ -40,6 +42,7 @@ self.addEventListener('message', (event) => {
   )
 })
 
+/* Hashed assets never change once built, so serving them from the cache is safe and fast. */
 async function cacheFirst(req) {
   const cache = await caches.open(CACHE)
   const hit = await cache.match(req, { ignoreVary: true })
@@ -49,11 +52,30 @@ async function cacheFirst(req) {
   return res
 }
 
+/* The HTML shell names the hashed assets, so a cached copy would pin visitors to an old
+   build forever. Try the network first; the cache is only for being offline. */
+async function networkFirst(req) {
+  const cache = await caches.open(CACHE)
+  try {
+    const res = await fetch(req)
+    if (res.ok) await cache.put(req, res.clone())
+    return res
+  } catch {
+    const hit = await cache.match(req, { ignoreVary: true })
+    if (hit) return hit
+    throw new Error('Offline and the page is not cached yet.')
+  }
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request
   if (req.method !== 'GET') return
   const url = new URL(req.url)
   if (url.origin !== self.location.origin) return
   if (url.pathname.includes('/icons/')) return
+  if (req.mode === 'navigate' || (req.headers.get('accept') ?? '').includes('text/html')) {
+    event.respondWith(networkFirst(req))
+    return
+  }
   event.respondWith(cacheFirst(req))
 })

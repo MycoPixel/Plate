@@ -27,8 +27,8 @@ import { chartEls } from './charts'
 import { shapeEls } from './shapes'
 import { t, useLang } from './i18n'
 import { ICON_MIME } from './iconFilter'
-import { markerNumber } from './markers'
-import type { ArrowItem, ChartItem, ColorVision, Doc, Handle, IconItem, ImageItem, Item, MembraneItem, Pt, Rect, ShapeItem, TextItem, Tool } from './types'
+import { readingOrder } from './markers'
+import type { ArrowItem, ChartItem, ColorVision, Doc, Handle, IconItem, ImageItem, Item, MarkerItem, MembraneItem, Pt, Rect, ShapeItem, TextItem, Tool } from './types'
 import type { Guide } from './geometry'
 import { clamp, isFormTarget } from './util'
 
@@ -43,6 +43,7 @@ type Drag =
   | { kind: 'draft'; tool: 'poly' | 'path'; id: string | null; pts: Pt[] }
   | { kind: 'lineEnd'; which: 1 | 2; origin: MembraneItem; moved: boolean }
   | { kind: 'lineBend'; origin: MembraneItem; moved: boolean }
+  | { kind: 'markerSize'; origin: MarkerItem; moved: boolean }
   | { kind: 'marquee'; start: Pt; base: string[]; moved: boolean }
   | { kind: 'pan'; sx: number; sy: number; left: number; top: number }
 
@@ -178,7 +179,18 @@ const MembraneView = memo(function MembraneView({ item, zoom }: { item: Membrane
   )
 })
 
-const ItemView = memo(function ItemView({ item, zoom, v, doc }: { item: Item; zoom: number; v: number; doc: Doc }) {
+const ItemView = memo(function ItemView({
+  item,
+  zoom,
+  v,
+  markerLabel,
+}: {
+  item: Item
+  zoom: number
+  v: number
+  /** The marker's number in reading order, or undefined for anything else. */
+  markerLabel?: number
+}) {
   switch (item.type) {
     case 'icon':
       return <IconView item={item} v={v} />
@@ -278,7 +290,7 @@ const ItemView = memo(function ItemView({ item, zoom, v, doc }: { item: Item; zo
             dominantBaseline="central"
             pointerEvents="none"
           >
-            {markerNumber(doc, item.id)}
+            {markerLabel ?? ''}
           </text>
         </g>
       )
@@ -442,6 +454,49 @@ function Overlay({ items, zoom }: { items: Item[]; zoom: number }) {
         </g>
       )
     }
+    if (it.type === 'marker') {
+      // A marker is just a circle: four rim handles that set its size, no rotate, no box.
+      const r = it.size / 2
+      return (
+        <g>
+          <circle
+            className="sel-box thin"
+            cx={it.x}
+            cy={it.y}
+            r={r}
+            fill="none"
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+          />
+          {!it.locked && (
+            <>
+              <line
+                className="sel-line"
+                x1={it.x}
+                y1={it.y}
+                x2={it.x + r}
+                y2={it.y}
+                vectorEffect="non-scaling-stroke"
+                pointerEvents="none"
+              />
+              {([['nw', -1, -1], ['ne', 1, -1], ['se', 1, 1], ['sw', -1, 1]] as const).map(([h, hx, hy]) => (
+                <rect
+                  key={h}
+                  className="handle"
+                  data-handle="size"
+                  x={it.x + hx * r - hs / 2}
+                  y={it.y + hy * r - hs / 2}
+                  width={hs}
+                  height={hs}
+                  vectorEffect="non-scaling-stroke"
+                  style={{ cursor: CURSORS[h] }}
+                />
+              ))}
+            </>
+          )}
+        </g>
+      )
+    }
     const b = boxOf(it)
     const c = centerOf(b)
     const corners = it.type === 'text'
@@ -549,11 +604,66 @@ export function Canvas(props: CanvasProps) {
   const zoomRef = useRef(zoom)
   const setZoomRef = useRef(props.setZoom)
   const anchor = useRef<{ bx: number; by: number; cx: number; cy: number } | null>(null)
+  /** Touch pointers on the stage right now, for the two-finger pinch. */
+  const pointers = useRef(new Map<number, { x: number; y: number }>())
+  /** Where the pinch started, so the board point under the fingers stays under them. */
+  const pinch = useRef<{ d0: number; zoom0: number; b0: Pt; mid: Pt; left: number; top: number } | null>(null)
 
   useEffect(() => {
     zoomRef.current = zoom
     setZoomRef.current = props.setZoom
   })
+
+  /** Stops any gesture in progress, dropping a shape that was only half drawn. */
+  const cancelDrag = () => {
+    const d = drag.current
+    if (!d) return
+    if ((d.kind === 'create' || d.kind === 'draft') && d.id) {
+      setDoc((doc0) => ({ ...doc0, items: doc0.items.filter((i) => i.id !== d.id) }), false)
+    }
+    drag.current = null
+    setMarquee(null)
+    setGuides({ v: [], h: [] })
+    setConnectTo(null)
+  }
+
+  /** Two fingers down: remember where the pinch began and stop whatever else was going on. */
+  const beginPinch = () => {
+    const stage = stageRef.current
+    const [a, b] = [...pointers.current.values()]
+    if (!stage || !a || !b) return
+    cancelDrag()
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+    pinch.current = {
+      d0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+      zoom0: zoomRef.current,
+      b0: toBoard({ clientX: mid.x, clientY: mid.y }),
+      mid,
+      left: stage.scrollLeft,
+      top: stage.scrollTop,
+    }
+  }
+
+  /** Pinch in and out, keeping the board point that was between the fingers between them. */
+  const movePinch = () => {
+    const stage = stageRef.current
+    const p = pinch.current
+    const [a, b] = [...pointers.current.values()]
+    if (!stage || !p || !a || !b) return
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+    const z = clamp(p.zoom0 * (Math.hypot(a.x - b.x, a.y - b.y) / p.d0), 0.1, 4)
+    if (Math.abs(z - zoomRef.current) > 0.001) {
+      // The layout effect on zoom lands b0 at the midpoint's position once the new size renders.
+      const er = stage.getBoundingClientRect()
+      anchor.current = { bx: p.b0.x, by: p.b0.y, cx: mid.x - er.left, cy: mid.y - er.top }
+      setZoomRef.current(z)
+    } else {
+      // Zoom is pinned at a limit; still let the figure follow the fingers.
+      stage.scrollLeft = p.left - (mid.x - p.mid.x)
+      stage.scrollTop = p.top - (mid.y - p.mid.y)
+    }
+    p.mid = mid
+  }
 
   const selected = useMemo(() => doc.items.filter((i) => selection.includes(i.id)), [doc.items, selection])
 
@@ -623,7 +733,10 @@ export function Canvas(props: CanvasProps) {
     const onWheel = (e: WheelEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return
       e.preventDefault()
-      const next = clamp(zoomRef.current * Math.exp(-e.deltaY * 0.0015), 0.1, 4)
+      // Firefox reports wheel steps in lines and page turns, not pixels; put them on the
+      // same scale so one notch zooms about the same amount on every browser.
+      const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * el.clientHeight : e.deltaY
+      const next = clamp(zoomRef.current * Math.exp(-dy * 0.0015), 0.1, 4)
       const bp = toBoardRef.current(e)
       const er = el.getBoundingClientRect()
       anchor.current = { bx: bp.x, by: bp.y, cx: e.clientX - er.left, cy: e.clientY - er.top }
@@ -706,6 +819,17 @@ export function Canvas(props: CanvasProps) {
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const stage = stageRef.current
     if (!stage) return
+    // A second finger means a pinch, whoever was already touching the board.
+    if (e.pointerType !== 'mouse') {
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      if (pointers.current.size === 2) {
+        stage.setPointerCapture(e.pointerId)
+        beginPinch()
+        return
+      }
+    }
+    // Pens and extra fingers must not add marquee corners or clear the selection.
+    if (!e.isPrimary) return
     if (e.button === 1 || (e.button === 0 && spaceDown)) {
       e.preventDefault()
       stage.setPointerCapture(e.pointerId)
@@ -790,6 +914,10 @@ export function Canvas(props: CanvasProps) {
         drag.current = { kind: 'lineBend', origin: only, moved: false }
         return
       }
+      if (handle === 'size' && only.type === 'marker') {
+        drag.current = { kind: 'markerSize', origin: only, moved: false }
+        return
+      }
       if (only.type !== 'arrow' && only.type !== 'membrane' && only.type !== 'marker' && handle in CURSORS) {
         drag.current = { kind: 'resize', handle: handle as Handle, origin: only, moved: false }
         return
@@ -834,6 +962,13 @@ export function Canvas(props: CanvasProps) {
   }
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (pointers.current.has(e.pointerId)) {
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      if (pointers.current.size >= 2 && pinch.current) {
+        movePinch()
+        return
+      }
+    }
     const d = drag.current
     if (!d) {
       // With the arrow tool, show which item a press would start the arrow on.
@@ -974,6 +1109,16 @@ export function Canvas(props: CanvasProps) {
         patch(d.origin.id, (it) => (it.type === 'arrow' ? { ...it, bend } : it))
         break
       }
+      case 'markerSize': {
+        if (!d.moved) {
+          d.moved = true
+          checkpoint()
+        }
+        // The handle sits on the circle's rim, so the size just follows the pointer.
+        const size = clamp(Math.hypot(p.x - d.origin.x, p.y - d.origin.y) * 2, 8, 400)
+        patch(d.origin.id, (it) => (it.type === 'marker' ? { ...it, size: Math.round(size * 10) / 10 } : it))
+        break
+      }
       case 'create': {
         if (!d.id) {
           if (Math.hypot(p.x - d.start.x, p.y - d.start.y) * zoom < 4) return
@@ -1047,6 +1192,8 @@ export function Canvas(props: CanvasProps) {
     const d = drag.current
     const stage = stageRef.current
     if (stage?.hasPointerCapture(e.pointerId)) stage.releasePointerCapture(e.pointerId)
+    pointers.current.delete(e.pointerId)
+    if (pointers.current.size < 2) pinch.current = null
     // A shape being drawn corner by corner survives the pointer coming up.
     if (d?.kind === 'draft') return
     drag.current = null
@@ -1090,6 +1237,13 @@ export function Canvas(props: CanvasProps) {
   const cursor = spaceDown ? 'grab' : tool === 'select' ? 'default' : tool === 'text' ? 'text' : 'crosshair'
   const W = doc.width * zoom
   const H = doc.height * zoom
+  // Marker numbers follow reading order, so they are worked out once per change and
+  // handed to each row as a plain value; passing the whole doc would defeat memo below.
+  const markerLabels = useMemo(() => {
+    const m = new Map<string, number>()
+    readingOrder(doc.items).forEach((mk, i) => m.set(mk.id, i + 1))
+    return m
+  }, [doc.items])
 
   return (
     <div
@@ -1135,7 +1289,17 @@ export function Canvas(props: CanvasProps) {
               <rect width={doc.width} height={doc.height} fill="url(#dots)" pointerEvents="none" />
             )}
             <g>
-              {doc.items.map((it) => (it.hidden ? null : <ItemView key={it.id} item={it} zoom={zoom} v={iconsV} doc={doc} />))}
+              {doc.items.map((it) =>
+                it.hidden ? null : (
+                  <ItemView
+                    key={it.id}
+                    item={it}
+                    zoom={zoom}
+                    v={iconsV}
+                    markerLabel={it.type === 'marker' ? markerLabels.get(it.id) : undefined}
+                  />
+                ),
+              )}
             </g>
             <Overlay items={selected} zoom={zoom} />
             {(guides.v.length > 0 || guides.h.length > 0) && (

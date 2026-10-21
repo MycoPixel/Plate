@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from './Canvas'
 import { creditedImages, usedIcons } from './credits'
 import { CreditsDialog } from './CreditsDialog'
+import { ErrorBoundary } from './ErrorBoundary'
 import { FigureDialog } from './FigureDialog'
 import { emptyDoc, exampleDoc, INK, newChart, newIcon, newImage, newMarker, newShape, newText, uid } from './defaults'
 import { canPaste, copyItems, pasteCopies, setClipboardVerified } from './clipboard'
@@ -127,7 +128,7 @@ export default function App() {
   const imageRef = useRef<HTMLInputElement>(null)
   const saveWarned = useRef(false)
   const toastTimer = useRef<number | undefined>(undefined)
-  const snapRef = useRef<{ figId: string; at: number; sig: string } | null>(null)
+  const snapRef = useRef<{ figId: string; at: number; doc: Doc } | null>(null)
 
   // Move an old localStorage figure into the store, then open the most recent one.
   const booting = useRef(false)
@@ -140,6 +141,9 @@ export default function App() {
         if (shared) {
           reset(shared)
           setFigId(null)
+          // The link has done its job; drop the hash so a reload does not import the
+          // shared figure again on top of the user's own edits.
+          history.replaceState(null, '', window.location.pathname + window.location.search)
           say(t('Opened the shared figure. It is yours to edit, and it is saved like any other.'))
           return
         }
@@ -152,7 +156,7 @@ export default function App() {
         if (latest) {
           reset(latest.doc)
           setFigId(latest.id)
-          snapRef.current = { figId: latest.id, at: Date.now(), sig: JSON.stringify(latest.doc) }
+          snapRef.current = { figId: latest.id, at: Date.now(), doc: latest.doc }
         } else {
           reset(readLocalFigure() ?? emptyDoc())
           setFigId(null)
@@ -214,7 +218,11 @@ export default function App() {
   // Snapshots are the undo history of a whole session: at most one every few minutes.
   const snapshot = useCallback(async () => {
     if (!figId) return
-    snapRef.current = { figId, at: Date.now(), sig: JSON.stringify(doc) }
+    snapRef.current = { figId, at: Date.now(), doc }
+    // A figure full of photos can be many megabytes; such versions would fill the
+    // browser's storage, so only the autosave keeps them. Measured here, where it
+    // runs at most once every few minutes, instead of on every drag frame.
+    if (JSON.stringify(doc).length > 3_000_000) return
     try {
       await saveVersion(figId, doc)
     } catch {
@@ -224,20 +232,21 @@ export default function App() {
 
   useEffect(() => {
     if (!booted || !figId) return
-    const sig = JSON.stringify(doc)
-    // A figure full of photos can be many megabytes; snapshots would fill the browser's storage.
-    if (sig.length > 3_000_000) return
+    // Identity, not a JSON fingerprint: every change makes a new doc object, and this
+    // effect must stay cheap even while a photo-heavy figure is being dragged.
     const prev = snapRef.current
-    if (prev && prev.figId === figId && prev.sig === sig) return
+    if (prev && prev.figId === figId && prev.doc === doc) return
     const wait = prev && prev.figId === figId ? Math.max(0, 3 * 60 * 1000 - (Date.now() - prev.at)) : 0
     const timer = window.setTimeout(() => {
-      if (snapRef.current?.figId === figId && snapRef.current.sig === sig) return
+      if (snapRef.current?.figId === figId && snapRef.current.doc === doc) return
       void snapshot()
     }, wait + 3000)
     return () => window.clearTimeout(timer)
   }, [doc, figId, booted, snapshot])
 
   // Closing or hiding the tab saves at once instead of waiting for the debounce.
+  // One stable handler for both events: an inline arrow in removeEventListener matches
+  // nothing, so the old listener leaked on every hot reload and re-mount.
   useEffect(() => {
     if (!booted) return
     const onHide = () => {
@@ -245,10 +254,10 @@ export default function App() {
       void flush()
     }
     window.addEventListener('visibilitychange', onHide)
-    window.addEventListener('pagehide', () => void flush())
+    window.addEventListener('pagehide', onHide)
     return () => {
       window.removeEventListener('visibilitychange', onHide)
-      window.removeEventListener('pagehide', () => void flush())
+      window.removeEventListener('pagehide', onHide)
     }
   }, [booted, flush])
   useEffect(() => {
@@ -628,7 +637,7 @@ export default function App() {
           }
           reset(next)
           setFigId(id)
-          snapRef.current = { figId: id, at: Date.now(), sig: JSON.stringify(next) }
+          snapRef.current = { figId: id, at: Date.now(), doc: next }
           setSelection([])
           setGalleryOpen(false)
           setFitTick((n) => n + 1)
@@ -774,7 +783,7 @@ export default function App() {
     try {
       const id = await putFigure(parsed)
       setFigId(id)
-      snapRef.current = { figId: id, at: Date.now(), sig: JSON.stringify(parsed) }
+      snapRef.current = { figId: id, at: Date.now(), doc: parsed }
     } catch {
       /* keep it in memory even if the store is unavailable */
     }
@@ -1154,27 +1163,29 @@ export default function App() {
           />
         </main>
         <div className="side side-right">
-          <Inspector
-            doc={doc}
-            selected={selectedItems}
-            focusTextTick={focusTextTick}
-            patch={patchItems}
-            patchDoc={patchDoc}
-            onDuplicate={duplicate}
-            onRepeat={repeatSelection}
-            onDelete={remove}
-            onOrder={order}
-            onArrange={align}
-            onZoomSelection={() => setZoomSelTick((n) => n + 1)}
-            onFit={() => setFitTick((n) => n + 1)}
-            onSelect={selectFromLayers}
-            onToggle={toggleFlag}
-            onGroup={groupSel}
-            onUngroup={ungroupSel}
-            onScale={scaleSel}
-            onRedrawStructure={redrawStructure}
-            onReplaceIcon={openReplace}
-          />
+          <ErrorBoundary label="inspector">
+            <Inspector
+              doc={doc}
+              selected={selectedItems}
+              focusTextTick={focusTextTick}
+              patch={patchItems}
+              patchDoc={patchDoc}
+              onDuplicate={duplicate}
+              onRepeat={repeatSelection}
+              onDelete={remove}
+              onOrder={order}
+              onArrange={align}
+              onZoomSelection={() => setZoomSelTick((n) => n + 1)}
+              onFit={() => setFitTick((n) => n + 1)}
+              onSelect={selectFromLayers}
+              onToggle={toggleFlag}
+              onGroup={groupSel}
+              onUngroup={ungroupSel}
+              onScale={scaleSel}
+              onRedrawStructure={redrawStructure}
+              onReplaceIcon={openReplace}
+            />
+          </ErrorBoundary>
         </div>
       </div>
 

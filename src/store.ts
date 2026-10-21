@@ -76,10 +76,24 @@ export async function removeFigure(id: string): Promise<void> {
 /** Every saved figure, newest first. */
 export async function listFigures(): Promise<FigureMeta[]> {
   const s = await store('readonly')
-  const all = await req(s.getAll()) as Row[]
-  return all
-    .map(({ doc: _doc, ...meta }) => meta)
-    .sort((a, b) => b.updatedAt - a.updatedAt)
+  const out: FigureMeta[] = []
+  // A cursor walks one row at a time, so a gallery of photo-heavy figures never has
+  // every document in memory at once the way getAll() would.
+  await new Promise<void>((res, rej) => {
+    const r = s.openCursor()
+    r.onsuccess = () => {
+      const c = r.result
+      if (!c) {
+        res()
+        return
+      }
+      const { doc: _doc, ...meta } = c.value as Row
+      out.push(meta)
+      c.continue()
+    }
+    r.onerror = () => rej(r.error)
+  })
+  return out.sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
 export async function latestFigure(): Promise<(FigureMeta & { doc: Doc }) | null> {
