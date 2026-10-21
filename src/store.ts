@@ -1,5 +1,6 @@
 import { uid } from './defaults'
 import { sanitizeDoc } from './project'
+import type { SavedSymbol } from './symbols'
 import type { Doc } from './types'
 
 export type FigureMeta = {
@@ -14,10 +15,13 @@ type Row = FigureMeta & { doc: Doc }
 
 const DB_NAME = 'plate-figures'
 const STORE = 'figures'
+const SYMBOL_DB = 'plate-symbols'
+const SYMBOL_STORE = 'symbols'
 const LS_DOC = 'plate:doc:v1'
 const LS_MIGRATED = 'plate:migrated:v1'
 
 let dbp: Promise<IDBDatabase> | null = null
+let symDbp: Promise<IDBDatabase> | null = null
 
 function openDb(): Promise<IDBDatabase> {
   if (!dbp) {
@@ -33,9 +37,30 @@ function openDb(): Promise<IDBDatabase> {
   return dbp
 }
 
+function openSymbolDb(): Promise<IDBDatabase> {
+  if (!symDbp) {
+    symDbp = new Promise((res, rej) => {
+      const r = indexedDB.open(SYMBOL_DB, 1)
+      r.onupgradeneeded = () => {
+        if (!r.result.objectStoreNames.contains(SYMBOL_STORE)) {
+          r.result.createObjectStore(SYMBOL_STORE, { keyPath: 'id' })
+        }
+      }
+      r.onsuccess = () => res(r.result)
+      r.onerror = () => rej(r.error)
+    })
+  }
+  return symDbp
+}
+
 async function store(mode: IDBTransactionMode): Promise<IDBObjectStore> {
   const db = await openDb()
   return db.transaction(STORE, mode).objectStore(STORE)
+}
+
+async function symbolStore(mode: IDBTransactionMode): Promise<IDBObjectStore> {
+  const db = await openSymbolDb()
+  return db.transaction(SYMBOL_STORE, mode).objectStore(SYMBOL_STORE)
 }
 
 function req<T>(r: IDBRequest<T>): Promise<T> {
@@ -141,4 +166,34 @@ function parseLocal(text: string): Doc | null {
     /* not JSON */
   }
   return null
+}
+
+export async function putSymbol(sym: SavedSymbol): Promise<void> {
+  const s = await symbolStore('readwrite')
+  await req(s.put(sym))
+}
+
+export async function removeSymbol(id: string): Promise<void> {
+  const s = await symbolStore('readwrite')
+  await req(s.delete(id))
+}
+
+export async function listSymbols(): Promise<SavedSymbol[]> {
+  const s = await symbolStore('readonly')
+  const rows = (await req(s.getAll())) as SavedSymbol[]
+  const out: SavedSymbol[] = []
+  for (const row of rows) {
+    const doc = sanitizeDoc({ items: row.items })
+    if (!doc) continue
+    out.push({
+      id: row.id,
+      name: row.name,
+      updatedAt: row.updatedAt,
+      w: row.w,
+      h: row.h,
+      items: doc.items,
+      thumb: row.thumb || '',
+    })
+  }
+  return out.sort((a, b) => b.updatedAt - a.updatedAt)
 }

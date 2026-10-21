@@ -7,6 +7,23 @@
     <meta name="theme-color" content="#463C9B" />
     <link rel="apple-touch-icon" href="./icon-192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Set the theme before the first paint so a dark choice never flashes white.
+      ;(() => {
+        const ids = ['light', 'dark', 'grape', 'abyss', 'ember', 'sand', 'sage', 'sky']
+        const dark = { dark: 1, grape: 1, abyss: 1, ember: 1 }
+        let theme = 'light'
+        try {
+          const saved = localStorage.getItem('enlaceplot:theme')
+          if (ids.includes(saved)) theme = saved
+          else if (matchMedia('(prefers-color-scheme: dark)').matches) theme = 'dark'
+        } catch {
+          if (matchMedia('(prefers-color-scheme: dark)').matches) theme = 'dark'
+        }
+        document.documentElement.dataset.theme = theme
+        document.documentElement.style.colorScheme = dark[theme] ? 'dark' : 'light'
+      })()
+    </script>
     <meta name="description" content="A free, open figure editor for biology: drag in cells, tubes and receptors, label them, and export clean SVG or PNG." />
     <title>EnlacePlot</title>
   </head>

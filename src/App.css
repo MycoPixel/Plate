@@ -33,7 +33,7 @@
 .logo-b {
   fill: var(--eosin);
   fill-opacity: 0.8;
-  mix-blend-mode: multiply;
+  mix-blend-mode: var(--logo-blend);
 }
 
 .title {
@@ -51,7 +51,7 @@
 }
 .title:focus {
   border-color: var(--hema);
-  background: #fff;
+  background: var(--surface);
   outline: none;
   box-shadow: 0 0 0 2px var(--hema-soft);
 }
@@ -63,7 +63,7 @@
   gap: 7px;
   height: 34px;
   padding: 0 12px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   font-weight: 500;
@@ -75,7 +75,7 @@
 .btn-primary {
   background: var(--hema);
   border-color: var(--hema);
-  color: #fff;
+  color: var(--on-accent);
 }
 .btn-primary:hover:not(:disabled) {
   background: var(--hema-deep);
@@ -117,11 +117,11 @@
   border-radius: 8px;
 }
 .cluster .icon-btn:hover:not(:disabled) {
-  background: #fff;
+  background: var(--surface);
 }
 .tools .icon-btn[aria-pressed='true'] {
   background: var(--hema);
-  color: #fff;
+  color: var(--on-accent);
 }
 .zoom-readout {
   min-width: 52px;
@@ -133,7 +133,7 @@
   font-variant-numeric: tabular-nums;
 }
 .zoom-readout:hover {
-  background: #fff;
+  background: var(--surface);
 }
 .panel-toggles {
   display: none;
@@ -149,10 +149,10 @@
   left: 0;
   min-width: 232px;
   padding: 6px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: 0 12px 28px -8px rgba(19, 38, 47, 0.3);
+  box-shadow: 0 12px 28px -8px var(--shadow);
   z-index: 40;
 }
 .menu-pop[data-align='right'] {
@@ -182,6 +182,19 @@
   font: inherit;
   font-size: 12px;
   color: var(--ink-2);
+}
+.theme-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.theme-dot {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  box-shadow: inset 0 0 0 1px var(--surface);
 }
 
 /* ---------- workspace ---------- */
@@ -222,7 +235,7 @@
   gap: 8px;
   height: 34px;
   padding: 0 10px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   color: var(--ink-2);
@@ -260,7 +273,7 @@
   /* fixed, so IconGrid can work out which rows fall inside the scroll box */
   height: 120px;
   padding: 18px 8px 8px;
-  background: #fff;
+  background: var(--icon-bg);
   border: 1px solid var(--line-2);
   border-radius: var(--radius);
   cursor: grab;
@@ -284,7 +297,7 @@
   font-size: 12px;
   /* exactly 14px, so a tile is exactly the 120px IconGrid puts in each row */
   line-height: 14px;
-  color: var(--ink-2);
+  color: var(--icon-ink-2);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -300,8 +313,8 @@
   color: var(--hema);
 }
 .tile-lic[data-lic='CC0'] {
-  background: #dcefe5;
-  color: #1d5a3e;
+  background: var(--ok-bg);
+  color: var(--ok-ink);
 }
 .palette-foot {
   margin: 0;
@@ -346,8 +359,8 @@
   touch-action: none;
   user-select: none;
   box-shadow:
-    0 1px 2px rgba(19, 38, 47, 0.2),
-    0 14px 34px -10px rgba(19, 38, 47, 0.3);
+    0 1px 2px var(--shadow),
+    0 14px 34px -10px var(--shadow);
 }
 .grid-dot {
   fill: rgba(19, 38, 47, 0.22);
@@ -397,7 +410,7 @@
   gap: 2px;
   width: 100%;
   padding: 10px 12px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line-2);
   border-radius: var(--radius);
   text-align: left;
@@ -426,7 +439,7 @@
   grid-template-rows: auto auto auto;
   gap: 2px 6px;
   padding: 8px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line-2);
   border-radius: var(--radius);
 }
@@ -436,8 +449,8 @@
   place-items: center;
   height: 92px;
   background:
-    linear-gradient(45deg, #f3f6f8 25%, transparent 25%, transparent 75%, #f3f6f8 75%) 0 0 / 16px 16px,
-    #fafcfd;
+    linear-gradient(45deg, var(--checker-a) 25%, transparent 25%, transparent 75%, var(--checker-a) 75%) 0 0 / 16px 16px,
+    var(--checker-b);
   border: 1px solid var(--line);
   border-radius: 6px;
   cursor: pointer;
@@ -505,6 +518,27 @@
   stroke-dasharray: 3 2;
   opacity: 0.9;
 }
+.measure-line {
+  stroke: var(--hema);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 3;
+}
+.measure-dot {
+  fill: var(--surface);
+  stroke: var(--hema);
+  stroke-width: 1.5;
+}
+.measure-chip {
+  fill: var(--surface);
+  stroke: var(--line);
+  stroke-width: 1;
+  opacity: 0.94;
+}
+.measure-text {
+  fill: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 .icon-loading {
   fill: #e8eef1;
 }
@@ -521,7 +555,7 @@
   transform: translate(-50%, -50%);
   width: min(340px, 90%);
   padding: 22px 24px;
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--raised);
   border: 1px solid var(--line);
   border-radius: 10px;
   text-align: left;
@@ -583,7 +617,7 @@ textarea {
   min-width: 0;
   height: 30px;
   padding: 0 8px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
@@ -605,7 +639,7 @@ input[type='color'] {
   width: 38px;
   height: 30px;
   padding: 2px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
@@ -621,7 +655,7 @@ input[type='checkbox'] {
 .mini {
   height: 30px;
   padding: 0 10px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   font-size: 12px;
@@ -690,6 +724,8 @@ input[type='checkbox'] {
   width: 22px;
   height: 22px;
   object-fit: contain;
+  background: var(--icon-bg);
+  border-radius: 3px;
 }
 .layer span {
   overflow: hidden;
@@ -711,10 +747,10 @@ input[type='checkbox'] {
   border: 1px solid var(--line);
   border-radius: 12px;
   color: var(--ink);
-  box-shadow: 0 24px 60px -16px rgba(19, 38, 47, 0.5);
+  box-shadow: 0 24px 60px -16px var(--shadow);
 }
 .dialog::backdrop {
-  background: rgba(19, 38, 47, 0.45);
+  background: var(--overlay);
 }
 .dialog-body {
   display: grid;
@@ -748,7 +784,7 @@ input[type='checkbox'] {
   align-items: center;
   gap: 12px;
   padding: 6px 8px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line-2);
   border-radius: var(--radius);
 }
@@ -756,6 +792,8 @@ input[type='checkbox'] {
   width: 36px;
   height: 36px;
   object-fit: contain;
+  background: var(--icon-bg);
+  border-radius: 4px;
 }
 .credit-list div {
   display: grid;
@@ -784,7 +822,7 @@ input[type='checkbox'] {
   max-height: 300px;
   margin: 10px 0 14px;
   padding: 10px;
-  background: #fff;
+  background: var(--icon-bg);
   border: 1px solid var(--line-2);
   border-radius: var(--radius);
 }
@@ -817,6 +855,34 @@ input[type='checkbox'] {
 .kinds {
   margin-bottom: 8px;
 }
+.palette-list {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.palette-btn {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  padding: 7px 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 12.5px;
+  text-align: left;
+}
+.palette-btn:hover {
+  border-color: var(--hema);
+}
+.palette-strip {
+  display: flex;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 3px;
+}
+.palette-strip span {
+  flex: 1;
+}
 .layer .group-mark {
   flex: none;
   color: var(--hema);
@@ -830,10 +896,10 @@ input[type='checkbox'] {
   transform: translateX(-50%);
   max-width: min(560px, calc(100vw - 32px));
   padding: 10px 16px;
-  background: var(--ink);
-  color: #fff;
+  background: var(--toast-bg);
+  color: var(--toast-ink);
   border-radius: 8px;
-  box-shadow: 0 10px 28px -8px rgba(19, 38, 47, 0.5);
+  box-shadow: 0 10px 28px -8px var(--shadow);
   z-index: 60;
 }
 
@@ -858,7 +924,7 @@ input[type='checkbox'] {
     bottom: 0;
     z-index: 20;
     width: min(320px, 88vw);
-    box-shadow: 0 0 40px rgba(19, 38, 47, 0.25);
+    box-shadow: 0 0 40px var(--shadow);
     /* closed drawers must also leave the tab order, not just slide away */
     visibility: hidden;
     transition:
@@ -900,10 +966,10 @@ input[type='checkbox'] {
   color: var(--ink-2);
 }
 .seg button[aria-pressed='true'] {
-  background: #fff;
+  background: var(--surface);
   color: var(--ink);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(19, 38, 47, 0.18);
+  box-shadow: 0 1px 2px var(--shadow);
 }
 .palette-head .grid2 select {
   font-size: 12.5px;
@@ -929,7 +995,7 @@ input[type='checkbox'] {
   border-radius: 4px;
   font-size: 16px;
   line-height: 1;
-  color: var(--ink-2);
+  color: var(--icon-ink-2);
   opacity: 0;
 }
 .tile-wrap:hover .tile-fav,
@@ -938,7 +1004,7 @@ input[type='checkbox'] {
   opacity: 1;
 }
 .tile-fav[aria-pressed='true'] {
-  color: #c98a00;
+  color: var(--marker);
 }
 .tile-fav:hover {
   background: var(--line-2);
@@ -949,8 +1015,8 @@ input[type='checkbox'] {
   }
 }
 .tile-lic[data-lic='PD'] {
-  background: #dcefe5;
-  color: #1d5a3e;
+  background: var(--ok-bg);
+  color: var(--ok-ink);
 }
 
 /* ---------- text: sub/superscript buttons ---------- */
@@ -979,10 +1045,42 @@ input[type='checkbox'] {
 .export-summary {
   margin: 0;
   padding: 8px 10px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line-2);
   border-radius: var(--radius);
   font-size: 13px;
+}
+.preflight {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+}
+.preflight h3 {
+  font-size: 12px;
+  font-weight: 650;
+}
+.preflight-list {
+  list-style: none;
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  font-size: 12.5px;
+}
+.preflight-list li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 6px;
+}
+.preflight-list li[data-level='warn'] .glyph {
+  color: var(--eosin);
+}
+.preflight-list li[data-level='info'] .glyph {
+  color: var(--ink-2);
 }
 .dialog-actions {
   gap: 8px;
@@ -1030,7 +1128,7 @@ input[type='checkbox'] {
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line-2);
   border-radius: var(--radius);
 }
@@ -1074,4 +1172,11 @@ input[type='checkbox'] {
 }
 .conn-free {
   margin: 0 0 6px;
+}
+.symbol-save {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 8px;
+  margin-bottom: 8px;
 }

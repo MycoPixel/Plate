@@ -208,12 +208,18 @@ export type MarkerItem = Flags & {
   fontSize: number
 }
 
+export type FigureScale = {
+  pxPerUnit: number
+  unit: string
+}
+
 export type Doc = {
   title: string
   width: number
   height: number
   background: string
   transparent: boolean
+  scale?: FigureScale
   items: Item[]
 }
 
@@ -233,5 +239,7 @@ export type Tool =
   | 'callout'
   | 'poly'
   | 'path'
+  | 'style'
+  | 'measure'
 export type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 export type Rect = { x: number; y: number; w: number; h: number }

@@ -4,6 +4,7 @@ import '@fontsource-variable/instrument-sans'
 import './index.css'
 import App from './App.tsx'
 import { ErrorBoundary } from './ErrorBoundary.tsx'
+import { initTheme } from './theme'
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
@@ -20,6 +21,8 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
       .catch(() => {})
   })
 }
+
+initTheme()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

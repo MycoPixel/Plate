@@ -44,6 +44,7 @@ type Drag =
   | { kind: 'lineEnd'; which: 1 | 2; origin: MembraneItem; moved: boolean }
   | { kind: 'lineBend'; origin: MembraneItem; moved: boolean }
   | { kind: 'markerSize'; origin: MarkerItem; moved: boolean }
+  | { kind: 'measure'; start: Pt }
   | { kind: 'marquee'; start: Pt; base: string[]; moved: boolean }
   | { kind: 'pan'; sx: number; sy: number; left: number; top: number }
 
@@ -382,6 +383,37 @@ function ConnectHighlight({ item, zoom }: { item: Item; zoom: number }) {
   )
 }
 
+function MeasureView({ a, b, zoom, scale }: { a: Pt; b: Pt; zoom: number; scale?: Doc['scale'] }) {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const px = Math.hypot(dx, dy)
+  const shown = scale ? px / scale.pxPerUnit : (px * 25.4) / 96
+  const unit = scale?.unit ?? 'mm'
+  const n = shown >= 100 ? Math.round(shown).toString() : shown >= 10 ? shown.toFixed(1) : shown.toFixed(2)
+  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+  const fs = 13 / zoom
+  const label = `${n} ${unit}`
+  const w = label.length * fs * 0.58 + 14 / zoom
+  return (
+    <g pointerEvents="none">
+      <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="measure-line" vectorEffect="non-scaling-stroke" />
+      <circle cx={a.x} cy={a.y} r={3 / zoom} className="measure-dot" vectorEffect="non-scaling-stroke" />
+      <circle cx={b.x} cy={b.y} r={3 / zoom} className="measure-dot" vectorEffect="non-scaling-stroke" />
+      <rect
+        x={mid.x - w / 2}
+        y={mid.y - fs - 10 / zoom}
+        width={w}
+        height={fs + 10 / zoom}
+        rx={4 / zoom}
+        className="measure-chip"
+      />
+      <text x={mid.x} y={mid.y - 5 / zoom} textAnchor="middle" fontSize={fs} className="measure-text">
+        {label}
+      </text>
+    </g>
+  )
+}
+
 function Overlay({ items, zoom }: { items: Item[]; zoom: number }) {
   if (items.length === 0) return null
   const hs = 9 / zoom
@@ -585,6 +617,7 @@ export type CanvasProps = {
   onCreateText: (at: Pt) => void
   onExample: () => void
   onImportFiles: (files: File[], at: Pt) => void
+  onPickStyle: (item: Item) => void
 }
 
 export function Canvas(props: CanvasProps) {
@@ -597,6 +630,7 @@ export function Canvas(props: CanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null)
   const drag = useRef<Drag | null>(null)
   const [marquee, setMarquee] = useState<Rect | null>(null)
+  const [measure, setMeasure] = useState<{ a: Pt; b: Pt } | null>(null)
   const [guides, setGuides] = useState<{ v: Guide[]; h: Guide[] }>({ v: [], h: [] })
   const [spaceDown, setSpaceDown] = useState(false)
   /** The item an arrow end would attach to right now (highlighted while drawing or dragging an end). */
@@ -669,6 +703,7 @@ export function Canvas(props: CanvasProps) {
 
   useEffect(() => {
     if (tool !== 'arrow') setConnectTo(null)
+    if (tool !== 'measure') setMeasure(null)
   }, [tool])
 
   const toBoard = useCallback((e: { clientX: number; clientY: number }): Pt => {
@@ -846,6 +881,18 @@ export function Canvas(props: CanvasProps) {
     const p = toBoard(e)
     stage.setPointerCapture(e.pointerId)
 
+    if (tool === 'style') {
+      const id = target.closest('[data-id]')?.getAttribute('data-id') ?? null
+      const item = id ? doc.items.find((i) => i.id === id) : undefined
+      if (item && !item.locked) props.onPickStyle(item)
+      drag.current = null
+      return
+    }
+    if (tool === 'measure') {
+      drag.current = { kind: 'measure', start: p }
+      setMeasure({ a: p, b: p })
+      return
+    }
     if (tool === 'text') {
       props.onCreateText(snapP(p))
       drag.current = null
@@ -987,6 +1034,9 @@ export function Canvas(props: CanvasProps) {
     const p = toBoard(e)
 
     switch (d.kind) {
+      case 'measure':
+        setMeasure({ a: d.start, b: p })
+        break
       case 'move': {
         let dx = p.x - d.start.x
         let dy = p.y - d.start.y
@@ -1234,7 +1284,7 @@ export function Canvas(props: CanvasProps) {
     props.onAddIcon(id, snapP(toBoard(e)))
   }
 
-  const cursor = spaceDown ? 'grab' : tool === 'select' ? 'default' : tool === 'text' ? 'text' : 'crosshair'
+  const cursor = spaceDown ? 'grab' : tool === 'select' ? 'default' : tool === 'text' ? 'text' : tool === 'style' ? 'copy' : 'crosshair'
   const W = doc.width * zoom
   const H = doc.height * zoom
   // Marker numbers follow reading order, so they are worked out once per change and
@@ -1302,6 +1352,7 @@ export function Canvas(props: CanvasProps) {
               )}
             </g>
             <Overlay items={selected} zoom={zoom} />
+            {measure && <MeasureView a={measure.a} b={measure.b} zoom={zoom} scale={doc.scale} />}
             {(guides.v.length > 0 || guides.h.length > 0) && (
               <g pointerEvents="none">
                 {guides.v.map((g, i) => (

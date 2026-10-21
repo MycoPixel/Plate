@@ -227,6 +227,14 @@ function anchorOf(v: unknown): Anchor | undefined {
   return side ? { id: v.id, side } : { id: v.id }
 }
 
+function sanitizeScale(raw: unknown): Doc['scale'] {
+  if (!isObj(raw)) return undefined
+  const pxPerUnit = num(raw.pxPerUnit, 0)
+  const unit = str(raw.unit, '').trim().slice(0, 12)
+  if (!(pxPerUnit > 0) || !unit) return undefined
+  return { pxPerUnit, unit }
+}
+
 export function sanitizeDoc(raw: unknown): Doc | null {
   if (!isObj(raw) || !Array.isArray(raw.items)) return null
   const base = emptyDoc()
@@ -250,6 +258,7 @@ export function sanitizeDoc(raw: unknown): Doc | null {
     height: Math.min(8000, Math.max(100, num(raw.height, base.height))),
     background: str(raw.background, base.background),
     transparent: bool(raw.transparent, false),
+    scale: sanitizeScale(raw.scale),
     items: remapped,
   }))
 }

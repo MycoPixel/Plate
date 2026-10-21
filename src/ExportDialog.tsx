@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { exportLayout, pngSize } from './export'
 import { Glyph } from './Glyph'
+import { preflight } from './preflight'
 import { t, useLang } from './i18n'
 import type { Doc } from './types'
 
@@ -73,6 +74,12 @@ export function ExportDialog({
   const heightMm = round1((widthMm * height) / width)
   const scale = (widthMm / 25.4 * dpi) / width
   const px = pngSize(width, height, scale)
+
+  const issues = useMemo(
+    () =>
+      open && layout ? preflight(doc, layout.visible, layout.width, widthMm, dpi, format, withCredits) : [],
+    [open, layout, doc, widthMm, dpi, format, withCredits],
+  )
 
   const run = () => onRun({ format, onlyIds, widthMm, dpi })
 
@@ -178,6 +185,22 @@ export function ExportDialog({
           <input type="checkbox" checked={withCredits} onChange={(e) => setWithCredits(e.target.checked)} />
           <span>{t('Add the credit line under the figure when exporting')}</span>
         </label>
+
+        <div className="preflight">
+          <h3>{t('Preflight')}</h3>
+          {issues.length === 0 ? (
+            <p className="note small">{t('No issues found for this export.')}</p>
+          ) : (
+            <ul className="preflight-list">
+              {issues.map((issue, i) => (
+                <li key={`${issue.key}-${i}`} data-level={issue.level}>
+                  <Glyph name={issue.level === 'warn' ? 'close' : 'check'} size={14} />
+                  <span>{t(issue.key, issue.vars)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         <div className="dialog-actions">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={run}>

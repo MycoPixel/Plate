@@ -20,6 +20,7 @@ import { decodeShare, encodeShare } from './share'
 import { sequenceItems } from './sequences'
 import type { FastaRecord, SequenceOptions } from './sequences'
 import { Glyph } from './Glyph'
+import { expandGroups } from './groups'
 import { HistoryDialog } from './HistoryDialog'
 import type { GlyphName } from './Glyph'
 import { useHistory } from './history'
@@ -32,10 +33,15 @@ import { Inspector } from './Inspector'
 import type { ArrangeOp, Order } from './Inspector'
 import { Menu, MenuItem } from './Menu'
 import { Palette } from './Palette'
+import { paintWithPalette } from './palettes'
 import { ReplaceIconDialog } from './ReplaceIconDialog'
+import { ScaleDialog } from './ScaleDialog'
 import { renderSmiles } from './structure'
+import { instantiateSymbol } from './symbols'
+import type { SavedSymbol } from './symbols'
 import type { StructureImage } from './structure'
 import { StructureDialog } from './StructureDialog'
+import { SymbolsDialog } from './SymbolsDialog'
 import { TemplateDialog } from './TemplateDialog'
 import type { Template } from './templates'
 import { parseProject, serializeProject } from './project'
@@ -43,6 +49,9 @@ import { dropVersions, saveVersion } from './versions'
 import type { VersionMeta } from './versions'
 import { getFigure, hasLocalFigure, latestFigure, markLocalFigureMigrated, putFigure, readLocalFigure, updateFigure } from './store'
 import type { ChartKind, ChartSeries, ColorVision, Doc, Item, Pt, Tool } from './types'
+import { applyStyle, styleOf } from './style'
+import type { ItemStyle } from './style'
+import { setTheme, THEMES, useTheme } from './theme'
 import { clamp, isTextEntry } from './util'
 import './App.css'
 
@@ -91,6 +100,7 @@ function Logo() {
 
 export default function App() {
   const lang = useLang()
+  const theme = useTheme()
   const initial = useMemo(() => emptyDoc(), [])
   const { doc, set: setHistory, reset, checkpoint, undo, redo, canUndo, canRedo } = useHistory<Doc>(initial)
   const [figId, setFigId] = useState<string | null>(null)
@@ -103,6 +113,7 @@ export default function App() {
   )
   const [selection, setSelection] = useState<string[]>([])
   const [tool, setTool] = useState<Tool>('select')
+  const [styleClip, setStyleClip] = useState<ItemStyle | null>(null)
   const [showMoreTools, setShowMoreTools] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [fitTick, setFitTick] = useState(0)
@@ -124,6 +135,8 @@ export default function App() {
   const [colorVision, setColorVision] = useState<ColorVision>('normal')
   const [exportOpen, setExportOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [scaleOpen, setScaleOpen] = useState(false)
+  const [symbolsOpen, setSymbolsOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const imageRef = useRef<HTMLInputElement>(null)
   const saveWarned = useRef(false)
@@ -179,6 +192,80 @@ export default function App() {
     window.clearTimeout(toastTimer.current)
     toastTimer.current = window.setTimeout(() => setToast(null), 4200)
   }, [])
+
+  useEffect(() => {
+    if (tool !== 'style') setStyleClip(null)
+  }, [tool])
+
+  const finishStyle = useCallback(() => {
+    setStyleClip(null)
+    setTool('select')
+  }, [])
+
+  const toggleStyle = useCallback(() => {
+    if (tool === 'style') {
+      finishStyle()
+      return
+    }
+    setShowMoreTools(false)
+    setStyleClip(null)
+    setTool('style')
+    say(
+      sel.length
+        ? t('Click the item whose style you want to copy; it will be applied to the selected items.')
+        : t('Click an item to copy its style, then click other items to paint it. Press Esc when done.'),
+    )
+  }, [tool, sel.length, finishStyle, say])
+
+  const applyPalette = useCallback(
+    (colors: string[]) => {
+      const order = new Map(selectedItems.filter((i) => !i.locked).map((item, i) => [item.id, i]))
+      if (!order.size) return
+      set(
+        (d) => ({
+          ...d,
+          items: d.items.map((item) => {
+            const index = order.get(item.id)
+            return index === undefined ? item : paintWithPalette(item, colors, index)
+          }),
+        }),
+        true,
+        'palette',
+      )
+      say(t('Palette applied.'))
+    },
+    [selectedItems, set, say],
+  )
+
+  const pickStyle = useCallback(
+    (item: Item) => {
+      if (styleClip) {
+        const ids = expandGroups(doc.items, [item.id]).filter((id) => {
+          const target = doc.items.find((i) => i.id === id)
+          return target && !target.locked
+        })
+        const chosen = new Set(ids)
+        if (!chosen.size) return
+        set((d) => ({ ...d, items: d.items.map((i) => (chosen.has(i.id) ? applyStyle(i, styleClip) : i)) }), true, 'style')
+        return
+      }
+      const picked = styleOf(item)
+      const targets = doc.items.filter((i) => sel.includes(i.id) && !i.locked).map((i) => i.id)
+      if (targets.length) {
+        const chosen = new Set(targets)
+        set((d) => ({ ...d, items: d.items.map((i) => (chosen.has(i.id) ? applyStyle(i, picked) : i)) }), true, 'style')
+        say(
+          t('Style applied to {n} selected items. Click other items to paint, or press Esc when done.', {
+            n: targets.length,
+          }),
+        )
+      } else {
+        say(t('Style copied. Click other items to apply it. Press Esc when done.'))
+      }
+      setStyleClip(picked)
+    },
+    [styleClip, doc.items, sel, set, say],
+  )
 
   // Keep icon files loading for whatever is on the board, and autosave the figure.
   useEffect(() => {
@@ -707,6 +794,19 @@ export default function App() {
     [set, say],
   )
 
+  const insertSymbol = useCallback(
+    (sym: SavedSymbol) => {
+      const n = doc.items.length % 6
+      const at = { x: doc.width / 2 + n * 18 - 45, y: doc.height / 2 + n * 18 - 45 }
+      const items = instantiateSymbol(sym, at)
+      set((d) => ({ ...d, items: [...d.items, ...items] }))
+      setSelection(items.map((i) => i.id))
+      setSymbolsOpen(false)
+      say(t('“{name}” inserted. Everything in it can be moved, repainted or deleted.', { name: sym.name }))
+    },
+    [doc.items.length, doc.width, doc.height, set, say],
+  )
+
   const insertGenerated = useCallback(
     (req: GeneratorRequest) => {
       const items =
@@ -940,6 +1040,8 @@ export default function App() {
         case '0':
           return setFitTick((n) => n + 1)
       }
+      if (k === 'i') return toggleStyle()
+      if (k === 'u') return setTool('measure')
       const tl = TOOLS.find((x) => x.key.toLowerCase() === k)
       if (tl) setTool(tl.id)
     }
@@ -982,6 +1084,7 @@ export default function App() {
         <Menu label={t('Insert')} icon={<Glyph name="insert" size={16} />}>
           <MenuItem onClick={addPanelLabel}>{t('Panel label (A, B, C…)')}</MenuItem>
           <MenuItem onClick={addScaleBar}>{t('Scale bar')}</MenuItem>
+          <MenuItem onClick={() => setScaleOpen(true)}>{t('Figure scale…')}</MenuItem>
           <MenuItem onClick={addMarker}>{t('Numbered marker')}</MenuItem>
           <MenuItem onClick={addLegend} disabled={!hasMarkers(doc)}>
             {t('Marker legend')}
@@ -994,6 +1097,7 @@ export default function App() {
           <MenuItem onClick={() => setStructureOpen(true)}>{t('Chemical structure from SMILES…')}</MenuItem>
           <MenuItem onClick={() => setSequenceOpen(true)}>{t('Sequence from FASTA…')}</MenuItem>
           <MenuItem onClick={() => imageRef.current?.click()}>{t('Image or SVG…')}</MenuItem>
+          <MenuItem onClick={() => setSymbolsOpen(true)}>{t('Saved symbols…')}</MenuItem>
         </Menu>
 
         <div className="cluster tools" role="toolbar" aria-label={t('Tools')}>
@@ -1020,6 +1124,27 @@ export default function App() {
             onClick={() => setShowMoreTools((v) => !v)}
           >
             <Glyph name="more" />
+          </button>
+          <span className="tools-split" aria-hidden="true" />
+          <button
+            type="button"
+            className="icon-btn"
+            aria-pressed={tool === 'style'}
+            title={`${t('Style eyedropper')} (I)`}
+            aria-label={t('Style eyedropper')}
+            onClick={toggleStyle}
+          >
+            <Glyph name="eyedropper" />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-pressed={tool === 'measure'}
+            title={`${t('Ruler')} (U)`}
+            aria-label={t('Ruler')}
+            onClick={() => setTool(tool === 'measure' ? 'select' : 'measure')}
+          >
+            <Glyph name="ruler" />
           </button>
         </div>
 
@@ -1088,6 +1213,17 @@ export default function App() {
             <Glyph name="snap" />
           </button>
         </div>
+
+        <Menu label={t('Theme')} icon={<Glyph name="palette" size={16} />} aria-label={t('Theme')}>
+          {THEMES.map((th) => (
+            <MenuItem key={th.id} onClick={() => setTheme(th.id)} hint={theme === th.id ? '✓' : undefined}>
+              <span className="theme-option">
+                <span className="theme-dot" style={{ background: th.swatch }} aria-hidden="true" />
+                {t(th.label)}
+              </span>
+            </MenuItem>
+          ))}
+        </Menu>
 
         <Menu label={lang.toUpperCase()} icon={<Glyph name="globe" size={16} />} aria-label={t('Language')}>
           {LANGS.map((l) => (
@@ -1160,6 +1296,7 @@ export default function App() {
             onCreateText={createText}
             onExample={loadExample}
             onImportFiles={(files, at) => void importFiles(files, at)}
+            onPickStyle={pickStyle}
           />
         </main>
         <div className="side side-right">
@@ -1184,6 +1321,7 @@ export default function App() {
               onScale={scaleSel}
               onRedrawStructure={redrawStructure}
               onReplaceIcon={openReplace}
+              onPalette={applyPalette}
             />
           </ErrorBoundary>
         </div>
@@ -1196,6 +1334,30 @@ export default function App() {
         withCredits={withCredits}
         setWithCredits={setWithCredits}
         onCopied={(ok) => say(ok ? t('Credit line copied.') : t('Could not copy. Select the text and copy it by hand.'))}
+      />
+
+      <SymbolsDialog
+        open={symbolsOpen}
+        onClose={() => setSymbolsOpen(false)}
+        selected={selectedItems}
+        onInsert={insertSymbol}
+      />
+
+      <ScaleDialog
+        open={scaleOpen}
+        doc={doc}
+        selected={selectedItems}
+        onClose={() => setScaleOpen(false)}
+        onSave={(pxPerUnit, unit) => {
+          patchDoc({ scale: { pxPerUnit, unit } })
+          setScaleOpen(false)
+          say(t('Scale saved. The ruler now measures in {unit}.', { unit }))
+        }}
+        onClear={() => {
+          patchDoc({ scale: undefined })
+          setScaleOpen(false)
+          say(t('Scale cleared. The ruler shows millimetres.'))
+        }}
       />
 
       <ExportDialog

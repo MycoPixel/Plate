@@ -277,6 +277,25 @@ const PATHS = {
   ),
   poly: <path d="M12 3.5l8.5 6.2-3.2 10H6.7l-3.2-10z" />,
   path: <path d="M3.5 18c4.5 0 5-12 8.5-12s4 12 8.5 12" />,
+  palette: (
+    <>
+      <path d="M12 3a9 9 0 100 18h1.5a2 2 0 001.3-3.5c-.8-.7-.3-1.9.8-1.9H18a3 3 0 003-3A9 9 0 0012 3z" />
+      <circle cx="7.5" cy="10" r="1" fill="currentColor" stroke="none" />
+      <circle cx="11" cy="7" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15.5" cy="9" r="1" fill="currentColor" stroke="none" />
+    </>
+  ),
+  eyedropper: (
+    <>
+      <path d="M14.5 4.5l5 5M13 6l5 5M4 20l1.2-4.2L14 7l3 3-8.8 8.8z" />
+    </>
+  ),
+  ruler: (
+    <>
+      <path d="M3 17L17 3l4 4L7 21z" />
+      <path d="M7 15l2 2M10 12l2 2M13 9l2 2" />
+    </>
+  ),
   more: (
     <>
       <circle cx="6" cy="12" r="1.4" fill="currentColor" stroke="none" />

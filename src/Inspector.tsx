@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ARTBOARDS, defaultBend } from './defaults'
 import { FONTS } from './geometry'
@@ -8,6 +8,7 @@ import { iconLabel, t, useLang } from './i18n'
 import { getIcon, ICON_BY_ID, ICONS, iconUrl, useIconCacheVersion } from './icons'
 import { markerNumber } from './markers'
 import { membraneLayout } from './membrane'
+import { colourConflicts, itemColours, PALETTES } from './palettes'
 import type { Anchor, ChartItem, ChartSeries, Doc, FontId, ImageItem, IconMeta, Item, MembraneItem, ShapeItem } from './types'
 import { isColor, round2 } from './util'
 
@@ -39,6 +40,7 @@ type Props = {
   onScale: (factor: number) => void
   onRedrawStructure: (id: string, smiles: string, color: boolean) => Promise<boolean>
   onReplaceIcon: () => void
+  onPalette: (colors: string[]) => void
 }
 
 function RepeatSection({ onRepeat }: { onRepeat: (count: number, dx: number, dy: number) => void }) {
@@ -59,6 +61,50 @@ function RepeatSection({ onRepeat }: { onRepeat: (count: number, dx: number, dy:
       >
         {t('Add copies')}
       </button>
+    </Section>
+  )
+}
+
+function PaletteSection({ selected, onPalette }: { selected: Item[]; onPalette: (colors: string[]) => void }) {
+  const conflicts = useMemo(
+    () => colourConflicts(selected.flatMap(itemColours)),
+    [selected],
+  )
+  const first = conflicts[0]
+  return (
+    <Section title={t('Accessible palette')}>
+      <p className="note small">{t('Apply a colourblind-safe palette to the selected shapes, text, markers, arrows and charts, in layer order.')}</p>
+      <div className="palette-list">
+        {PALETTES.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className="palette-btn"
+            title={t(p.label)}
+            aria-label={t(p.label)}
+            onClick={() => onPalette(p.colors)}
+          >
+            <span className="palette-strip" aria-hidden="true">
+              {p.colors.map((c) => (
+                <span key={c} style={{ background: c }} />
+              ))}
+            </span>
+            <span>{t(p.label)}</span>
+          </button>
+        ))}
+      </div>
+      {first ? (
+        <p className="note error">
+          {t('{n} colour pairs may be hard to tell apart under colour blindness. The closest is {a} and {b} ({vision}).', {
+            n: conflicts.length,
+            a: first.a,
+            b: first.b,
+            vision: t(first.vision === 'deuteranopia' ? 'Deuteranopia' : 'Protanopia'),
+          })}
+        </p>
+      ) : (
+        <p className="note small">{t('No very close colour pairs found under deuteranopia or protanopia.')}</p>
+      )}
     </Section>
   )
 }
@@ -720,6 +766,7 @@ export function Inspector(props: Props) {
             <span className="note small">{t('Scale together')}</span>
           </div>
         </Section>
+        <PaletteSection selected={selected} onPalette={props.onPalette} />
         {arrange}
       </>
     )
